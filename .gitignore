@@ -6,5 +6,19 @@ dist/
 wheels/
 *.egg-info
 
+.DS_Store
+
 # Virtual environments
 .venv
+
+.obsidian/
+
+# Obsidian (état local et plugins)
+IndusIAdansCloud/.obsidian/workspace.json
+IndusIAdansCloud/.obsidian/plugins/
+IndusIAdansCloud/.obsidian/community-plugins.json
+
+
+*.db
+mlruns/
+artifacts/

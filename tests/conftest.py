@@ -1,0 +1,80 @@
+import time
+
+import numpy as np
+import pytest
+from fastapi.testclient import TestClient
+
+from src.infrastructure.migrations import upgrade_to_head
+from src.serving.api import create_app
+
+VALID_ORDER = {
+    "hour": 14,
+    "day_of_week": 2,
+    "weekend": 0,
+    "distance_km": 3.5,
+    "order_value_eur": 89.9,
+    "weight_kg": 2.4,
+    "stock_available": 1,
+    "preparation_time_min": 18,
+    "carrier_capacity": 0.85,
+    "weather": "normal",
+    "delivery_zone": "centre",
+    "customer_type": "premium",
+}
+
+
+class FakeModel:
+    """Modèle factice : renvoie toujours la même probabilité d'éligibilité."""
+
+    def __init__(self, probability=0.8):
+        self.probability = probability
+
+    def predict_proba(self, data):
+        return np.tile([1 - self.probability, self.probability], (len(data), 1))
+
+
+def _no_model():
+    raise FileNotFoundError
+
+
+@pytest.fixture
+def valid_order():
+    return dict(VALID_ORDER)
+
+
+@pytest.fixture
+def fake_model():
+    return FakeModel()
+
+
+@pytest.fixture
+def database_url(tmp_path):
+    """Base SQLite temporaire, avec le schéma migré."""
+    url = f"sqlite:///{tmp_path / 'test.db'}"
+    upgrade_to_head(url)
+    return url
+
+
+@pytest.fixture
+def client(database_url):
+    app = create_app(database_url, model_loader=FakeModel)
+    with TestClient(app) as test_client:
+        yield test_client
+
+
+@pytest.fixture
+def client_without_model(database_url):
+    app = create_app(database_url, model_loader=_no_model)
+    with TestClient(app) as test_client:
+        yield test_client
+
+
+def wait_for(fetch, timeout=3.0):
+    """Appelle fetch() jusqu'à ce qu'il retourne une valeur non nulle."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        value = fetch()
+        if value is not None:
+            return value
+        time.sleep(0.05)
+    return None

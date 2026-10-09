@@ -1,6 +1,6 @@
 # ADR-0001 : Stockage des commandes clients
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-10-06
 - Deciders: Romain
 - Tags: `database`

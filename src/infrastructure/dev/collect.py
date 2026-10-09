@@ -1,16 +1,16 @@
-    """Génère les données synthétiques pout l'environnement de dev
-    """
+"""
+Génère les données synthétiques pour l'environnement de dev
+"""
 
+import numpy as np
 import pandas as pd
 
 from src.abstraction.collect import Collect
 
     
-class Collect_Dev(Collect):
-    def __init__:
-        pass
+class CollectDev(Collect):
     
-    def collect_batch(n_rows=6000, random_state=42):
+    def collect_data(self, n_rows=6000, random_state=42):
         """
         Génère un jeu de données fictif représentant des commandes.
         Le jeu de données est volontairement synthétique afin que le notebook

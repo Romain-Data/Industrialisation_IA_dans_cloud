@@ -1,11 +1,10 @@
-from abc import ABC
+from abc import ABC, abstractmethod
+
+import pandas as pd
+
 
 class Collect(ABC):
-    def __init__:
-        pass
     
-    def collect_data():
-        pass
-    
-    def collect_batch():
-        pass
+    @abstractmethod
+    def collect_data(self) -> pd.DataFrame:
+        """Retourne un lot de commandes brutes """

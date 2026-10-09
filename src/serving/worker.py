@@ -1,0 +1,67 @@
+import logging
+import threading
+
+from src.abstraction.order_queue import OrderQueue
+from src.abstraction.order_store import OrderStore
+from src.serving.service import compute_prediction
+
+logger = logging.getLogger(__name__)
+
+
+class OrderWorker:
+    """Consomme les événements de commande et enregistre leur prédiction."""
+
+    def __init__(self, order_queue: OrderQueue, order_store: OrderStore, get_model):
+        self._queue = order_queue
+        self._store = order_store
+        self._get_model = get_model
+        self._stop = threading.Event()
+        self._thread = None
+
+    def process_one(self, timeout=0.0):
+        """Traite au plus un événement. Retourne False si la file est vide."""
+        event = self._queue.consume(timeout)
+
+        if event is None:
+            return False
+
+        self._handle(event)
+        return True
+
+    def _handle(self, event):
+        order = dict(event["order"])
+        order_id = order.pop("order_id")
+        model = self._get_model()
+
+        if model is None:
+            logger.warning("Modèle indisponible, commande %s non prédite.", order_id)
+            return
+
+        try:
+            prediction = compute_prediction(order_id, order, model)
+        except ValueError:
+            logger.exception("Commande %s invalide, prédiction ignorée.", order_id)
+            return
+
+        self._store.save_prediction(prediction)
+
+    def _run(self):
+        while not self._stop.is_set():
+            try:
+                self.process_one(timeout=0.2)
+            except Exception:
+                logger.exception("Erreur inattendue dans le worker.")
+
+    def start(self):
+        self._stop.clear()
+        self._thread = threading.Thread(target=self._run, name="order-worker", daemon=True)
+        self._thread.start()
+
+    def stop(self):
+        self._stop.set()
+
+        if self._thread is not None:
+            self._thread.join(timeout=2)
+
+    def is_alive(self):
+        return self._thread is not None and self._thread.is_alive()
