@@ -37,6 +37,17 @@ def _no_model():
     raise FileNotFoundError
 
 
+@pytest.fixture(autouse=True)
+def isolated_mlflow(tmp_path, monkeypatch):
+    """Registre MLflow temporaire par test (le store est mis en cache par URI)."""
+    uri = f"sqlite:///{tmp_path / 'mlflow.db'}"
+    monkeypatch.setattr("src.training.registry.MLFLOW_TRACKING_URI", uri)
+    monkeypatch.setattr("src.serving.model_loader.MLFLOW_TRACKING_URI", uri)
+    monkeypatch.setattr(
+        "src.training.registry.MLFLOW_ARTIFACT_ROOT", (tmp_path / "mlartifacts").as_uri()
+    )
+
+
 @pytest.fixture
 def valid_order():
     return dict(VALID_ORDER)

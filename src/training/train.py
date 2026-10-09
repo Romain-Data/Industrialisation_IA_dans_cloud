@@ -14,13 +14,14 @@ from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-from src.config import RANDOM_STATE
+from src.config import RANDOM_STATE, REGISTERED_MODEL_NAME
 from src.domain.features import (
     CATEGORICAL_FEATURES,
     FEATURE_COLUMNS,
     NUMERIC_FEATURES,
     TARGET_COLUMN,
 )
+from src.training.registry import configure_mlflow
 
 
 def train_model(df):
@@ -92,7 +93,7 @@ def train_model(df):
         ]
     )
 
-    mlflow.set_experiment("livraison-express")
+    configure_mlflow()
 
     with mlflow.start_run(run_name="logistic-regression-baseline") as run:
         model_pipeline.fit(X_train, y_train)
@@ -118,7 +119,18 @@ def train_model(df):
         mlflow.sklearn.log_model(
             model_pipeline,
             artifact_path="model",
+            registered_model_name=REGISTERED_MODEL_NAME,
             skops_trusted_types=["numpy.dtype"]
+        )
+
+        mlflow.log_dict(
+            {
+                "target": TARGET_COLUMN,
+                "features": FEATURE_COLUMNS,
+                "numeric_features": NUMERIC_FEATURES,
+                "categorical_features": CATEGORICAL_FEATURES,
+            },
+            "features.json",
         )
 
         run_id = run.info.run_id

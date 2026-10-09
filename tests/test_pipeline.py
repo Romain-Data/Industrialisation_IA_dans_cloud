@@ -1,7 +1,10 @@
-import json
+import mlflow
+from mlflow import MlflowClient
 
 from src.abstraction.collect import Collect
+from src.config import CHAMPION_ALIAS, REGISTERED_MODEL_NAME
 from src.infrastructure.dev.collect import CollectDev
+from src.serving.model_loader import load_model
 from src.training.pipeline import run_training
 
 
@@ -10,15 +13,40 @@ class SmallCollect(Collect):
         return CollectDev().collect_data(n_rows=500)
 
 
-def test_training_pipeline_saves_artifacts(tmp_path, monkeypatch):
+def test_training_registers_model_and_sets_champion(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
-    model, metrics, run_id = run_training(SmallCollect())
+    _, metrics, run_id = run_training(SmallCollect())
 
-    artifacts = tmp_path / "artifacts"
-    assert (artifacts / "express_delivery_model.joblib").exists()
-    assert json.loads((artifacts / "metrics.json").read_text()) == metrics
-    assert "features" in json.loads((artifacts / "features.json").read_text())
     assert set(metrics) == {"accuracy", "precision", "recall", "f1_score", "roc_auc"}
     assert 0 <= metrics["roc_auc"] <= 1
     assert run_id
+
+    champion = MlflowClient().get_model_version_by_alias(
+        REGISTERED_MODEL_NAME, CHAMPION_ALIAS
+    )
+    assert champion.run_id == run_id
+    assert hasattr(load_model(), "predict_proba")
+
+
+def test_worse_model_does_not_replace_champion(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _, _, first_run = run_training(SmallCollect())
+
+    # Mêmes données, même ROC AUC : pas de promotion (comparaison stricte).
+    _, _, second_run = run_training(SmallCollect())
+
+    client = MlflowClient()
+    champion = client.get_model_version_by_alias(REGISTERED_MODEL_NAME, CHAMPION_ALIAS)
+    assert second_run != first_run
+    assert champion.run_id == first_run
+    assert len(client.search_model_versions(f"name='{REGISTERED_MODEL_NAME}'")) == 2
+
+
+def test_features_are_logged_with_the_run(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _, _, run_id = run_training(SmallCollect())
+
+    features = mlflow.artifacts.load_dict(f"runs:/{run_id}/features.json")
+
+    assert "features" in features

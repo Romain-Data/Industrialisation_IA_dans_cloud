@@ -1,10 +1,9 @@
-import joblib
 import pytest
 
 from src.domain.features import FEATURE_COLUMNS
 from src.infrastructure.dev.collect import CollectDev
 from src.serving.batch import batch_predict_orders, save_batch_predictions
-from src.serving.model_loader import MODEL_FILENAME, load_model
+from src.serving.model_loader import load_model
 from src.serving.predict import predict_order_eligibility
 from tests.conftest import FakeModel
 
@@ -86,12 +85,6 @@ def test_save_batch_predictions_writes_csv(batch_input, tmp_path):
     assert len(path.read_text().splitlines()) == 21
 
 
-def test_load_model_raises_when_missing(tmp_path):
+def test_load_model_raises_when_no_champion():
     with pytest.raises(FileNotFoundError, match="Modèle introuvable"):
-        load_model(tmp_path)
-
-
-def test_load_model_reads_saved_model(tmp_path):
-    joblib.dump({"model": "ok"}, tmp_path / MODEL_FILENAME)
-
-    assert load_model(tmp_path) == {"model": "ok"}
+        load_model()

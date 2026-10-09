@@ -21,4 +21,5 @@ IndusIAdansCloud/.obsidian/community-plugins.json
 
 *.db
 mlruns/
+mlartifacts/
 artifacts/

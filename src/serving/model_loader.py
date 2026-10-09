@@ -1,18 +1,19 @@
-import joblib
+import mlflow
+import mlflow.sklearn
 
-from src.config import ARTIFACTS_DIR
+from src.config import CHAMPION_ALIAS, MLFLOW_TRACKING_URI, REGISTERED_MODEL_NAME
 
-MODEL_FILENAME = "express_delivery_model.joblib"
+MODEL_URI = f"models:/{REGISTERED_MODEL_NAME}@{CHAMPION_ALIAS}"
 
 
-def load_model(artifacts_dir=ARTIFACTS_DIR):
-    """Charge le modèle entraîné depuis le dossier d'artefacts."""
-    model_path = artifacts_dir / MODEL_FILENAME
+def load_model():
+    """Charge la version du modèle portant l'alias champion dans le registre MLflow."""
+    mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 
-    if not model_path.exists():
+    try:
+        return mlflow.sklearn.load_model(MODEL_URI)
+    except mlflow.MlflowException as error:
         raise FileNotFoundError(
-            f"Modèle introuvable : {model_path}. "
+            f"Modèle introuvable : {MODEL_URI}. "
             "Lancer l'entraînement avant de démarrer le service."
-        )
-
-    return joblib.load(model_path)
+        ) from error
