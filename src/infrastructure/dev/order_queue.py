@@ -1,3 +1,5 @@
+"""File d'attente en mémoire du processus (dev et instance unique, ADR-0006)."""
+
 import queue
 
 from src.abstraction.order_queue import OrderQueue

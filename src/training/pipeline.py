@@ -1,3 +1,5 @@
+"""Pipeline d'entraînement : collecte, validation, nettoyage, entraînement, promotion."""
+
 from src.abstraction.collect import Collect
 from src.config import (
     CHAMPION_ALIAS,

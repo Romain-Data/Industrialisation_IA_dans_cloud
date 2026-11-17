@@ -42,7 +42,7 @@ extend-immutable-calls = ["fastapi.Depends"]
 
 [tool.pylint.main]
 # Garde-fou contre la régression de qualité (CI) ; à remonter progressivement.
-fail-under = 8.5
+fail-under = 9.5
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

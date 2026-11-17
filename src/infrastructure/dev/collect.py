@@ -7,9 +7,10 @@ import pandas as pd
 
 from src.abstraction.collect import Collect
 
-    
+
 class CollectDev(Collect):
-    
+    """Générateur de commandes synthétiques étiquetées par la règle de calcul du notebook."""
+
     def collect_data(self, n_rows=6000, random_state=42):
         """
         Génère un jeu de données fictif représentant des commandes.
@@ -100,4 +101,3 @@ class CollectDev(Collect):
         data["express_eligible"] = rng.binomial(1, probability)
 
         return data
-

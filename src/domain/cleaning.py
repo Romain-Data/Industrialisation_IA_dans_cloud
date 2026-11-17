@@ -1,3 +1,5 @@
+"""Nettoyage des données d'entraînement : doublons, dates, valeurs manquantes ou hors bornes."""
+
 import pandas as pd
 
 
@@ -41,4 +43,3 @@ def clean_orders_data(df):
     cleaned = cleaned[cleaned["stock_available"].isin([0, 1])]
 
     return cleaned.reset_index(drop=True)
-

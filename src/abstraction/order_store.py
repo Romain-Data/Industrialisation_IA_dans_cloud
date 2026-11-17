@@ -1,3 +1,5 @@
+"""Contrat de stockage de nos propres commandes et prédictions (ADR-0001)."""
+
 from abc import ABC, abstractmethod
 
 import pandas as pd
@@ -8,6 +10,7 @@ class DuplicateOrderError(Exception):
 
 
 class OrderStore(ABC):
+    """Stockage de nos commandes, de leur résultat réel et de leurs prédictions."""
 
     @abstractmethod
     def save(self, order: dict) -> None:

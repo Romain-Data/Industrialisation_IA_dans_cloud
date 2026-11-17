@@ -1,3 +1,5 @@
+"""Prédiction par lot sur un DataFrame de commandes, avec export CSV."""
+
 import numpy as np
 
 from src.config import ARTIFACTS_DIR, DEFAULT_THRESHOLD

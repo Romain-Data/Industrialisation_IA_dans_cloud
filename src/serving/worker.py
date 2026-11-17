@@ -1,3 +1,5 @@
+"""Worker qui consomme la file des commandes et enregistre leurs prédictions (ADR-0006)."""
+
 import logging
 import threading
 
@@ -53,15 +55,18 @@ class OrderWorker:
                 logger.exception("Erreur inattendue dans le worker.")
 
     def start(self):
+        """Démarre le thread du worker (thread démon, arrêté avec l'API)."""
         self._stop.clear()
         self._thread = threading.Thread(target=self._run, name="order-worker", daemon=True)
         self._thread.start()
 
     def stop(self):
+        """Demande l'arrêt du worker et attend la fin du traitement en cours (2 s au plus)."""
         self._stop.set()
 
         if self._thread is not None:
             self._thread.join(timeout=2)
 
     def is_alive(self):
+        """Indique si le thread du worker tourne (utilisé par /health/ready)."""
         return self._thread is not None and self._thread.is_alive()
