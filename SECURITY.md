@@ -38,4 +38,4 @@ Ce projet est maintenu dans un cadre de formation : ces délais sont des objecti
 - **Dépendances** : versions figées par `uv.lock`.
 - **API** : validation stricte des entrées (Pydantic, champs inconnus refusés), HTTPS assuré par le proxy de Coolify.
 
-Les limites connues (notamment l'absence d'authentification sur l'API) et les évolutions prévues sont décrites dans l'[ADR-0005](IndusIAdansCloud/ADR/ADR-0005%20-%20S%C3%A9curisation.md).
+Les limites connues (notamment l'absence d'authentification sur l'API) et les évolutions prévues sont décrites dans l'[ADR-0005](IndusIAdansCloud/ADR/ADR-0005%20-%20S%C3%A9curisation%20des%20entr%C3%A9es%2C%20sorties%20et%20acc%C3%A8s%20%C3%A0%20la%20donn%C3%A9e.md).

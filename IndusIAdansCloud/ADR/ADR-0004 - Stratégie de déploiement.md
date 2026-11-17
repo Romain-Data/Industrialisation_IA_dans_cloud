@@ -98,7 +98,7 @@ Nous déployons par une CI GitHub Actions qui déclenche Coolify uniquement quan
 
 ## Links
 
-- Related ADRs : [[ADR-0002 - Stockage des artefacts de modele]], [[ADR-0003 - Choix de la plateforme de déploiement]], [[ADR-0005 - Sécurisation]]
+- Related ADRs : [[ADR-0002 - Stockage des artefacts de modele]], [[ADR-0003 - Choix de la plateforme de déploiement]], [[ADR-0005 - Sécurisation des entrées, sorties et accès à la donnée]]
 - External references :
   - [Coolify : API](https://coolify.io/docs/api-reference/authorization)
   - [GitHub Actions](https://docs.github.com/actions)

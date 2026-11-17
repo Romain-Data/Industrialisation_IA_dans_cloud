@@ -1,4 +1,4 @@
-# ADR-0005 : Sécurisation
+# ADR-0005 : Sécurisation des entrées, des sorties et de l'accès à la donnée
 
 - Status: Accepted
 - Date: 2026-11-17
