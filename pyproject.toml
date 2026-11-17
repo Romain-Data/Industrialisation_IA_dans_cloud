@@ -1,6 +1,6 @@
 [project]
 name = "industrialisation-ia-dans-cloud"
-version = "0.1.0"
+version = "0.2.0"
 description = "API de prédiction d'éligibilité à la livraison express (industrialisation d'un POC ML)"
 readme = "README.md"
 license = "MIT"

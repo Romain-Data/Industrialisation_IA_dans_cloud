@@ -186,9 +186,12 @@ uv run pylint src       # qualité (score minimal dans pyproject.toml)
 
 Le dépôt suit **GitFlow** (détails dans [CONTRIBUTING.md](CONTRIBUTING.md)). La CI GitHub Actions ([`ci.yml`](.github/workflows/ci.yml)) :
 
-1. à chaque push et pull request : `ruff`, `pylint`, `pytest` ;
-2. sur `develop` et sur une GitHub Release : construit l'image `linux/amd64`, vérifie qu'elle démarre, la scanne avec Trivy, la publie sur `ghcr.io/romain-data/industrialisation_ia_dans_cloud` (tags `sha-xxxxxxx` et `X.Y.Z`) ;
-3. déploie avec Coolify : `develop` → preprod, release → prod. Coolify ne met la nouvelle version en service que si `/health/ready` répond.
+1. à chaque push et pull request : `ruff`, `pylint`, `pytest` (avec un MongoDB de test) ;
+2. sur `develop` : construit **une fois** les images `linux/amd64` de l'API et de l'orchestrateur, vérifie qu'elles démarrent, les scanne avec Trivy et les publie sur GHCR (tag `sha-xxxxxxx`) ;
+3. déploie en **préprod** avec Coolify, attend le résultat, lance des tests de fumée sur l'URL de préprod ([`scripts/smoke_test.py`](scripts/smoke_test.py)) et pose le statut **« Préprod vérifiée »** sur le commit ;
+4. la PR `develop` → `main` exige ce statut ; sa fusion **promeut** les mêmes images (tag `X.Y.Z`, sans reconstruction), crée la GitHub Release, déploie en **prod** et vérifie sa santé.
+
+Coolify ne met une nouvelle version en service que si `/health/ready` répond ; sinon l'ancienne reste en place et la CI échoue.
 
 L'image Docker ([`Dockerfile`](Dockerfile)) est construite en deux étapes avec uv, tourne avec un utilisateur non root et sert à la fois l'API (`api`, par défaut), l'entraînement (`train`), l'import de l'ERP (`etl`) et les migrations (`migrate`) ; la cible `orchestrator` ajoute Prefect pour exécuter les flows.
 
