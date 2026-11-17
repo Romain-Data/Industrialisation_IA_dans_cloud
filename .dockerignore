@@ -26,3 +26,4 @@ tests/
 openapi.yml
 README.md
 docker-compose.yml
+erp_simulator/
