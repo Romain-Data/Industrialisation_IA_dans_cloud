@@ -1,0 +1,28 @@
+# Seuls pyproject.toml, uv.lock, alembic.ini, migrations/, src/ et
+# docker-entrypoint.sh sont utiles au build.
+.git
+.github
+.venv
+.env
+.env.*
+.mcp.json
+.claude
+.DS_Store
+**/__pycache__
+.pytest_cache
+.ruff_cache
+
+# Données et artefacts locaux : jamais dans l'image
+*.db
+mlruns/
+mlartifacts/
+artifacts/
+**/artifacts/
+**/*.ipynb
+
+# Hors application
+IndusIAdansCloud/
+tests/
+openapi.yml
+main.py
+README.md
