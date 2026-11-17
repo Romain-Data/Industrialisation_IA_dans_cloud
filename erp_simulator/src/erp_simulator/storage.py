@@ -44,9 +44,11 @@ class PostgresWriter:
             distance_km DOUBLE PRECISION NOT NULL, order_value_eur DOUBLE PRECISION NOT NULL,
             weight_kg DOUBLE PRECISION NOT NULL, stock_available INTEGER NOT NULL,
             preparation_time_min DOUBLE PRECISION, carrier_capacity DOUBLE PRECISION NOT NULL,
-            weather TEXT NOT NULL, delivery_zone TEXT NOT NULL, customer_type TEXT NOT NULL)"""
+            weather TEXT NOT NULL, delivery_zone TEXT NOT NULL, customer_type TEXT NOT NULL,
+            express_eligible INTEGER)"""
         )
         self.connection.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_date DATE")
+        self.connection.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS express_eligible INTEGER")
         self.connection.execute("ALTER TABLE orders ALTER COLUMN weekend DROP NOT NULL")
         self.connection.execute("ALTER TABLE orders ALTER COLUMN preparation_time_min DROP NOT NULL")
         self.connection.execute(
@@ -58,7 +60,8 @@ class PostgresWriter:
             """INSERT INTO schema_migrations (version, description) VALUES
             (2015, 'Ajout de la colonne weekend'),
             (2017, 'Ajout de la colonne preparation_time_min'),
-            (2023, 'Extension du schéma pour le flux courant')
+            (2023, 'Extension du schéma pour le flux courant'),
+            (2026, 'Ajout de la cible express_eligible')
             ON CONFLICT (version) DO NOTHING"""
         )
         self.connection.commit()

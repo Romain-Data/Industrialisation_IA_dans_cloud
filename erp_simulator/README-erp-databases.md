@@ -19,6 +19,11 @@ Toutes les commandes utilisent le même identifiant séquentiel dans les deux ba
 par exemple `ERP-00011001`. L'identifiant ne contient pas la date et reste unique
 entre l'ancien historique, l'historique partagé et le flux live.
 
+Chaque commande porte la cible `express_eligible` (0 ou 1), absente du jeu fourni à
+l'origine (oubli confirmé par l'enseignant). Elle est calculée par la règle du notebook
+(cellule 8 : score métier, sigmoïde, tirage), adaptée au vocabulaire de l'ERP, avec un
+tirage déterministe par commande. Les caractéristiques des commandes sont inchangées.
+
 L'historique reproduit aussi les migrations : `weekend` vaut `NULL` avant le
 1er juillet 2015, et `preparation_time_min` vaut `NULL` avant le 1er juillet
 2017. Les commandes à partir d'aujourd'hui possèdent toutes les colonnes

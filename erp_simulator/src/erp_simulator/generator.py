@@ -2,8 +2,35 @@
 
 from __future__ import annotations
 
+import math
 import random
 from datetime import date, timedelta
+
+# Cible express_eligible (oubli du jeu fourni, confirmé par l'enseignant) : règle de
+# calcul du notebook (cellule 8), adaptée au vocabulaire de l'ERP. L'application
+# en a une copie dans src/domain/eligibility.py ; un test vérifie leur accord.
+ZONE_PENALTY = {"centre": 0.0, "suburb": 0.20, "rural": 0.45}
+WEATHER_PENALTY = {"clear": 0.0, "rain": 0.10, "wind": 0.15, "snow": 0.25}
+
+
+def express_probability(order: dict[str, object]) -> float:
+    """Probabilité d'éligibilité express : sigmoïde d'un score métier linéaire."""
+    weekend = order["weekend"] if order["weekend"] is not None else int(order["day_of_week"] >= 5)
+    preparation = order["preparation_time_min"] if order["preparation_time_min"] is not None else 25.0
+    score = (
+        2.5
+        - 0.18 * order["distance_km"]
+        - 0.035 * preparation
+        - 0.035 * order["weight_kg"]
+        - ZONE_PENALTY[order["delivery_zone"]]
+        - WEATHER_PENALTY[order["weather"]]
+        + 1.8 * order["stock_available"]
+        + 1.3 * order["carrier_capacity"] / 50
+        + 0.15 * (order["customer_type"] == "business")
+        - 0.40 * weekend
+        - 0.08 * max(order["hour"] - 18, 0)
+    )
+    return 1 / (1 + math.exp(-score))
 
 
 class OrderGenerator:
@@ -12,7 +39,7 @@ class OrderGenerator:
     @staticmethod
     def build(sequence: int, order_date: date) -> dict[str, object]:
         rng = random.Random(sequence)
-        return {
+        order = {
             "order_id": f"ERP-{sequence:08d}",
             "order_date": order_date,
             "hour": 8 + sequence % 12,
@@ -30,6 +57,9 @@ class OrderGenerator:
             "delivery_zone": rng.choice(["centre", "suburb", "rural"]),
             "customer_type": rng.choice(["individual", "business"]),
         }
+        # Tiré après les caractéristiques : elles restent identiques à celles d'avant.
+        order["express_eligible"] = int(rng.random() < express_probability(order))
+        return order
 
     def old_history(self, count: int, today: date, first_sequence: int = 1) -> list[dict[str, object]]:
         return self._history(count, date(2015, 1, 1), min(date(2022, 12, 31), today - timedelta(days=1)), first_sequence)
