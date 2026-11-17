@@ -103,9 +103,22 @@ jobs:
       APP_UUID: ${{ vars.COOLIFY_APP_UUID }}
       IMAGE_TAG: ${{ needs.build.outputs.sha_tag }}
     steps:
+      # Tant que l'application Coolify de l'environnement n'existe pas, on ne déploie pas
+      # (l'image est quand même publiée sur GHCR).
+      - name: Vérifier la configuration Coolify
+        id: config
+        run: |
+          if [ -z "$APP_UUID" ]; then
+            echo "::warning::COOLIFY_APP_UUID non défini pour l'environnement ${{ startsWith(github.ref, 'refs/tags/v') && 'prod' || 'preprod' }} : déploiement ignoré."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
       # Coolify tire l'image publiée sans la reconstruire : on lui indique le tag
       # exact (SHA) avant de déclencher le déploiement. L'auto-deploy Coolify reste désactivé.
       - name: Pointer l'application Coolify sur l'image ${{ needs.build.outputs.sha_tag }}
+        if: steps.config.outputs.ready == 'true'
         run: |
           curl --fail-with-body -sS -X PATCH \
             -H "Authorization: Bearer $COOLIFY_TOKEN" \
@@ -115,6 +128,7 @@ jobs:
 
       # Coolify vérifie /health/ready et garde l'ancienne version si le démarrage échoue.
       - name: Déclencher le déploiement
+        if: steps.config.outputs.ready == 'true'
         run: |
           curl --fail-with-body -sS -X POST \
             -H "Authorization: Bearer $COOLIFY_TOKEN" \
