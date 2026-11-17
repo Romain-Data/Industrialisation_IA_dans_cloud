@@ -181,15 +181,18 @@ openapi.yml        contrat de l'API
 
 ## Décisions d'architecture
 
-Les choix structurants sont documentés sous forme d'ADR dans [`IndusIAdansCloud/ADR/`](IndusIAdansCloud/ADR/) :
+Les choix structurants sont documentés sous forme d'ADR dans [`IndusIAdansCloud/ADR/`](IndusIAdansCloud/ADR/). Nos numéros suivent l'ordre de rédaction ; la table indique quel ADR traite chaque sujet du barème du cours.
 
-- [ADR-0001](IndusIAdansCloud/ADR/ADR-0001%20-%20Stockage%20commande%20clients.md) : stockage des commandes (SQLAlchemy, PostgreSQL, DuckLake)
-- [ADR-0002](IndusIAdansCloud/ADR/ADR-0002%20-%20Stockage%20des%20artefacts%20de%20modele.md) : stockage des modèles (MLflow, alias `champion`)
-- [ADR-0003](IndusIAdansCloud/ADR/ADR-0003%20-%20Choix%20de%20la%20plateforme%20de%20d%C3%A9ploiement.md) : plateforme de déploiement (Coolify, Docker)
-- [ADR-0004](IndusIAdansCloud/ADR/ADR-0004%20-%20Strat%C3%A9gie%20de%20d%C3%A9ploiement.md) : stratégie de déploiement (CI, GitFlow, preprod / prod)
-- [ADR-0005](IndusIAdansCloud/ADR/ADR-0005%20-%20S%C3%A9curisation.md) : sécurisation (secrets, image, CI, dépôt, limites connues)
-- [ADR-0006](IndusIAdansCloud/ADR/ADR-0006%20-%20File%20d'attente.md) : file d'attente des commandes (en mémoire, worker)
-- [ADR-0007](IndusIAdansCloud/ADR/ADR-0007%20-%20Source%20des%20donn%C3%A9es%20ERP.md) : source des données ERP (MongoDB analytique, ETL)
+| Sujet du barème | ADR du projet | Contenu |
+|---|---|---|
+| ADR-0001 : Stockage des commandes | [ADR-0001](IndusIAdansCloud/ADR/ADR-0001%20-%20Stockage%20des%20commandes.md) | SQLAlchemy, SQLite / PostgreSQL, Alembic, snapshots DuckLake |
+| ADR-0002 : Stockage des artefacts de modèle | [ADR-0002](IndusIAdansCloud/ADR/ADR-0002%20-%20Stockage%20des%20artefacts%20de%20modele.md) | MLflow, registre, alias `champion`, schéma de données |
+| ADR-0003 : Quelle plateforme de déploiement ? | [ADR-0003](IndusIAdansCloud/ADR/ADR-0003%20-%20Choix%20de%20la%20plateforme%20de%20d%C3%A9ploiement.md) | Coolify sur VPS, image Docker unique |
+| ADR-0004 : Cloud, on-premise ou local ? | — | *À rédiger (ADR-0008)* |
+| ADR-0005 : Quelle stratégie de déploiement ? | [ADR-0004](IndusIAdansCloud/ADR/ADR-0004%20-%20Strat%C3%A9gie%20de%20d%C3%A9ploiement.md) | CI GitHub Actions, GitFlow, preprod / prod |
+| ADR-0006 : PostgreSQL, MongoDB, autre ? | [ADR-0007](IndusIAdansCloud/ADR/ADR-0007%20-%20PostgreSQL%2C%20MongoDB%20ou%20autre.md) | MongoDB analytique en lecture seule, ETL |
+| ADR-0007 : Sécuriser les entrées, sorties et l'accès à la donnée | [ADR-0005](IndusIAdansCloud/ADR/ADR-0005%20-%20S%C3%A9curisation%20des%20entr%C3%A9es%2C%20sorties%20et%20acc%C3%A8s%20%C3%A0%20la%20donn%C3%A9e.md) | secrets, image, CI, dépôt, limites connues |
+| *(hors barème)* | [ADR-0006](IndusIAdansCloud/ADR/ADR-0006%20-%20File%20d'attente.md) | file d'attente des commandes (en mémoire, worker) |
 
 ## Contribuer
 

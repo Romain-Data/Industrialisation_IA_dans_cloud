@@ -62,6 +62,6 @@ Nous découplons la collecte de la prédiction par une file d'attente derrière 
 
 ## Links
 
-- Related ADRs : [[ADR-0001 - Stockage commande clients]], [[ADR-0003 - Choix de la plateforme de déploiement]], [[ADR-0005 - Sécurisation]]
+- Related ADRs : [[ADR-0001 - Stockage des commandes]], [[ADR-0003 - Choix de la plateforme de déploiement]], [[ADR-0005 - Sécurisation des entrées, sorties et accès à la donnée]]
 - Contrat : `openapi.yml` (`OrderEvent`, `POST /v1/orders`)
 - Code : `src/abstraction/order_queue.py`, `src/infrastructure/dev/order_queue.py`, `src/serving/worker.py`

@@ -1,4 +1,4 @@
-# ADR-0007 : Source des données ERP (PostgreSQL ou MongoDB)
+# ADR-0007 : PostgreSQL, MongoDB ou autre ? Source des données ERP
 
 - Status: Accepted
 - Date: 2026-11-17
@@ -88,7 +88,7 @@ Nous intégrons les données de l'ERP depuis **MongoDB**, la base analytique, en
 
 ## Links
 
-- Related ADRs : [[ADR-0001 - Stockage commande clients]], [[ADR-0005 - Sécurisation]], [[ADR-0006 - File d'attente]]
+- Related ADRs : [[ADR-0001 - Stockage des commandes]], [[ADR-0005 - Sécurisation des entrées, sorties et accès à la donnée]], [[ADR-0006 - File d'attente]]
 - Simulateur : `erp_simulator/` (`docker-compose.erp.yml`, `storage.py`, `generator.py`)
 - Cours « Industrialisation de l'IA dans le cloud #4 » : base analytique, réplication, intégration d'une base au projet
 - External references :

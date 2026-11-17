@@ -74,7 +74,7 @@ Tout changement futur du vocabulaire ou des variables doit incrémenter `DATA_SC
 
 ## Links
 
-- Related ADRs : [[ADR-0001 - Stockage commande clients]]
+- Related ADRs : [[ADR-0001 - Stockage des commandes]]
 - Code : `src/training/registry.py`, `src/training/train.py`, `src/serving/model_loader.py`
 - External references :
   - [MLflow Model Registry](https://mlflow.org/docs/latest/ml/model-registry/)
