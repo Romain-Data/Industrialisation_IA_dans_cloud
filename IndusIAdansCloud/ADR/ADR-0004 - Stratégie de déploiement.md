@@ -1,7 +1,7 @@
 # ADR-0004 : Stratégie de déploiement
 
 - Status: Accepted
-- Date: 2026-10-09
+- Date: 2026-10-09 (mise à jour le 2026-11-17 après la mise en œuvre)
 - Deciders: Romain
 - Tags: `infra`, `ci-cd`
 
@@ -18,13 +18,15 @@ Le schéma de base évolue avec Alembic (`migrations/`), et le modèle servi év
 Nous déployons par une CI GitHub Actions qui déclenche Coolify uniquement quand les contrôles passent, avec deux environnements.
 
 - **Environnements** : une application Coolify **preprod** et une application **prod**, chacune avec sa propre base PostgreSQL, son volume d'artefacts et ses variables d'environnement. Un push sur `main` déploie en preprod ; un tag `vX.Y.Z` déploie en prod.
-- **Pipeline CI** : à chaque push et pull request, lint (`ruff`) et tests (`pytest`). Sur `main` et sur tag, si tout est vert, la CI construit l'image `linux/amd64`, la publie dans un registre (GitHub Container Registry) avec deux tags, le SHA du commit et, pour un tag, la version, puis appelle le webhook de déploiement Coolify de l'environnement concerné.
+- **Pipeline CI** : à chaque push et pull request, lint (`ruff`) et tests (`pytest`). Sur `main` et sur tag, si tout est vert, la CI construit l'image `linux/amd64`, la publie dans un registre (GitHub Container Registry) avec deux tags, le SHA du commit et, pour un tag, la version, puis déclenche le déploiement Coolify de l'environnement concerné par son API : elle fixe d'abord le tag d'image (SHA) de l'application, puis lance le déploiement.
 - **Auto-deploy Coolify désactivé** : Coolify ne déploie jamais de lui-même sur push ; seule la CI le déclenche. Coolify tire l'image publiée par tag, sans la reconstruire.
 - **Vérification** : un déploiement est considéré réussi quand `/health/ready` répond après le démarrage ; sinon Coolify garde l'ancienne version en service.
+- **Premier déploiement d'un environnement** : tant qu'aucun modèle `champion` n'existe, `/health/ready` répond 503 et Coolify refuserait la nouvelle version. Le premier déploiement se fait donc avec le health check sur `/health`, puis on lance un entraînement, on passe le health check sur `/health/ready` et on redéploie.
 - **Migrations de base** : exécutées par une commande Alembic (`alembic upgrade head`) avant le démarrage de la nouvelle version, avec des migrations rétrocompatibles d'une version à la suivante.
 - **Rechargement du modèle** : à la fin d'une tâche d'entraînement, si l'alias `champion` a changé, la tâche redémarre l'API de l'environnement concerné pour qu'elle charge le nouveau modèle. Il n'y a pas de rechargement à chaud.
 - **Rollback du code** : on redéploie le tag d'image précédent depuis Coolify. Le rollback du modèle reste le déplacement manuel de l'alias `champion` (ADR-0002) et ne nécessite pas de redéploiement.
-- **Secrets** : les secrets de déploiement (webhook et jeton Coolify, accès au registre) sont des secrets GitHub Actions ; les secrets d'exécution restent dans Coolify (ADR-0003).
+- **Secrets** : les secrets de déploiement (URL et jeton de l'API Coolify) sont des secrets GitHub Actions ; les secrets d'exécution restent dans Coolify (ADR-0003). Le jeton est limité au projet Coolify de cette application, avec les seuls droits nécessaires au déploiement (`write` pour fixer le tag d'image, `deploy`).
+- **Accès à l'API Coolify** : l'API accepte les appels de toutes les IP, car les runners GitHub n'ont pas d'adresse fixe. La protection repose sur le jeton.
 
 ### Justification
 
@@ -33,7 +35,9 @@ Nous déployons par une CI GitHub Actions qui déclenche Coolify uniquement quan
 - **Preprod puis prod sur tag** : permet de valider une version sur un environnement réel avant de la promouvoir, au prix d'une application de plus sur le VPS. La promotion par tag laisse une trace claire de ce qui est en production.
 - **Images taguées par SHA et par version** : rendent le rollback du code immédiat, sans reconstruction.
 - **Redémarrage plutôt que rechargement à chaud** : l'API charge déjà le champion au démarrage ; redémarrer ne demande aucun code supplémentaire, et le coût (courte indisponibilité, une seule instance) est déjà accepté dans l'ADR-0003.
-- **Webhook Coolify** : garde la CI indépendante des détails internes de Coolify, qui reste remplaçable.
+- **API Coolify plutôt que simple webhook** : le webhook redéploie le tag déjà configuré, sans dire quelle image prendre. Fixer le tag SHA avant de déployer garantit que l'image déployée est celle que la CI vient de tester, et garde le registre comme seule source des images. La CI reste limitée à deux appels HTTP, faciles à remplacer si la plateforme change.
+- **Premier déploiement en deux temps** : garder `/health/ready` comme critère de réussite (modèle chargé, base joignable, schéma à jour) plutôt que l'affaiblir en `/health` pour tous les déploiements ; le cas « pas encore de modèle » n'arrive qu'une fois par environnement.
+- **API ouverte à toutes les IP** : les plages d'adresses de GitHub Actions sont larges et changeantes ; les maintenir dans une liste blanche est fragile. Un runner auto-hébergé sur le VPS éviterait d'ouvrir l'API, mais consommerait des ressources sur une machine partagée.
 
 ## Consequences
 
@@ -49,6 +53,9 @@ Nous déployons par une CI GitHub Actions qui déclenche Coolify uniquement quan
 - Le redémarrage de l'API après entraînement provoque une courte interruption, et l'entraînement doit pouvoir joindre Coolify (jeton d'API) pour la déclencher.
 - Le rollback du code ne défait pas les migrations de base : un retour arrière après une migration destructive peut échouer ou perdre des données.
 - Dépendance à GitHub Actions et à GitHub Container Registry en plus de Coolify.
+- L'API Coolify est joignable depuis Internet : une fuite du jeton permet de modifier et de déployer les applications du projet (mais pas les autres projets du VPS, grâce à la limitation du jeton).
+- Le premier déploiement de chaque environnement demande des étapes manuelles (health check, entraînement, redéploiement).
+- La CI dépend du format de l'API Coolify (`PATCH /applications/{uuid}`, `POST /deploy`) : une mise à jour de Coolify peut la casser.
 
 **Neutres**
 - Les deux environnements ne se partagent ni base ni artefacts : le champion de la preprod est indépendant de celui de la prod.
@@ -58,7 +65,8 @@ Nous déployons par une CI GitHub Actions qui déclenche Coolify uniquement quan
 **Mesures d'atténuation**
 - Écrire des migrations additives et rétrocompatibles (ajout avant suppression, en deux déploiements) ; sauvegarder la base avant une migration en prod.
 - Définir les limites de mémoire de la preprod plus basses que celles de la prod, et l'arrêter quand elle n'est pas utilisée si le VPS est sous tension.
-- Limiter les droits du jeton Coolify utilisé par la CI et par la tâche d'entraînement, et le stocker uniquement comme secret.
+- Limiter les droits du jeton Coolify utilisé par la CI et par la tâche d'entraînement au seul projet de l'application, et le stocker uniquement comme secret ; le renouveler régulièrement et en cas de doute.
+- Vérifier la version de Coolify et la réponse de l'API (méthode HTTP, champs) avant une mise à jour de Coolify.
 - Vérifier le démarrage de l'image en CI (lancement du conteneur et appel de `/health/ready`) avant publication.
 - Conserver les dernières versions d'image dans le registre pour garder les rollbacks possibles.
 
@@ -71,11 +79,28 @@ Nous déployons par une CI GitHub Actions qui déclenche Coolify uniquement quan
 - **Déploiement continu en production à chaque push sur `main`** : plus rapide, mais retire la validation en preprod et la trace des versions ; écarté.
 - **Rechargement à chaud du modèle (endpoint ou lecture périodique de l'alias)** : évite l'interruption, mais ajoute du code et un état à tester pour une seule instance ; reporté.
 - **Rollback par `git revert` et nouveau déploiement** : plus lent que redéployer une image existante ; écarté pour le cas courant.
+- **Tag d'image mobile (`preprod`, `prod`) et webhook seul** : ne demande pas le droit `write`, mais l'image déployée n'est plus identifiable par son tag dans Coolify et un redéploiement peut prendre une image différente ; écarté.
+- **Liste blanche des IP de GitHub Actions** : garderait l'API fermée, mais les plages sont nombreuses et changent ; écarté.
+- **Runner GitHub auto-hébergé sur le VPS** : l'API reste fermée à Internet, mais le runner consomme des ressources sur le VPS partagé et devient un composant de plus à maintenir et à sécuriser ; reporté (à reconsidérer dans l'ADR-0005).
+- **Health check sur `/health` pour tous les déploiements** : supprime l'étape manuelle du premier déploiement, mais une version qui ne charge pas le modèle ou ne joint pas la base serait mise en service ; écarté.
+
+## Mise en œuvre (2026-11-17)
+
+- **CI** : `.github/workflows/ci.yml`. Jobs `checks` (ruff, pytest), `build` (image `ghcr.io/romain-data/industrialisation_ia_dans_cloud`, tags `sha-<7 caractères>` et version), `deploy`. Le job `deploy` utilise les environnements GitHub `preprod` et `prod`, qui portent chacun la variable `COOLIFY_APP_UUID` ; les secrets `COOLIFY_URL` et `COOLIFY_TOKEN` sont au niveau du dépôt. Si `COOLIFY_APP_UUID` n'est pas défini, le déploiement est ignoré avec un avertissement, sans faire échouer la CI.
+- **Coolify** (4.7.5) : projet « Indus IA dans le Cloud », environnements `preprod` et `production` (correspondant à l'environnement GitHub `prod`). Chacun contient une application « Docker Image » (`express-delivery-preprod` / `express-delivery-prod`, 1 Go, 1 CPU), une base PostgreSQL 17 (256 Mo, 0,5 CPU) et un volume monté sur `/app/mlartifacts`. Domaines : `express-delivery-preprod.romaincollery.com` et `express-delivery.romaincollery.com`.
+- **Démarrage du conteneur** (`docker-entrypoint.sh`) : création des bases manquantes (la base `mlflow`, que Coolify ne crée pas), `alembic upgrade head`, puis lancement de l'API. Les migrations sont donc jouées au démarrage de la nouvelle version, avant qu'elle reçoive du trafic.
+- **Health check** : exécuté par Coolify avec `curl` dans le conteneur (installé dans l'image), sur `/health/ready`, avec 60 s de délai au démarrage.
+- **Entraînement** : tâche planifiée Coolify `train` (`/app/docker-entrypoint.sh train`) sur l'application preprod, désactivée par défaut et activée à la demande.
+- **Pas encore fait** :
+  - le redémarrage automatique de l'API après un entraînement qui change le `champion` (aujourd'hui, redéploiement manuel) ;
+  - le test de démarrage de l'image en CI avant publication ;
+  - le premier déploiement de la prod (premier tag `vX.Y.Z`) ;
+  - les sauvegardes planifiées des bases et du volume (ADR-0003).
 
 ## Links
 
 - Related ADRs : [[ADR-0002 - Stockage des artefacts de modele]], [[ADR-0003 - Choix de la plateforme de déploiement]], [[ADR-0005 - Sécurisation]]
 - External references :
-  - [Coolify : déploiement par webhook](https://coolify.io/docs)
+  - [Coolify : API](https://coolify.io/docs/api-reference/authorization)
   - [GitHub Actions](https://docs.github.com/actions)
   - [GitHub Container Registry](https://docs.github.com/packages/working-with-a-github-packages-registry/working-with-the-container-registry)
