@@ -84,7 +84,7 @@ def test_prediction_is_unavailable_without_model(client_without_model, valid_ord
     [
         ({"distance_km": None}, "distance_km"),
         ({"foo": 1}, "foo"),
-        ({"carrier_capacity": 1.5}, "carrier_capacity"),
+        ({"carrier_capacity": -1}, "carrier_capacity"),
         ({"weather": "grele"}, "weather"),
         ({"stock_available": 3}, "stock_available"),
         ({"hour": 24}, "hour"),

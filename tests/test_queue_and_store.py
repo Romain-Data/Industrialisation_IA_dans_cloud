@@ -131,7 +131,7 @@ def test_worker_skips_order_when_model_is_unavailable(store, order):
 def test_worker_skips_invalid_order(store, order):
     queue = InMemoryOrderQueue()
     worker = OrderWorker(queue, store, lambda: FakeModel())
-    order["carrier_capacity"] = 2
+    order["carrier_capacity"] = -2
     queue.publish(make_event(order))
 
     assert worker.process_one() is True

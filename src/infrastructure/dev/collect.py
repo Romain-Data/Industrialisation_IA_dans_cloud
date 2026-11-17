@@ -42,43 +42,43 @@ class CollectDev(Collect):
                 rng.normal(loc=25, scale=10, size=n_rows).clip(5, 90),
                 1
             ),
+            # Vocabulaire et échelles de l'ERP (ADR-0007) : capacité de 5 à 50.
             "carrier_capacity": np.round(
-                rng.uniform(0.2, 1.0, size=n_rows),
+                rng.uniform(5, 50, size=n_rows),
                 2
             ),
             "weather": rng.choice(
-                ["normal", "pluie", "neige", "orage"],
+                ["clear", "rain", "wind", "snow"],
                 size=n_rows,
-                p=[0.65, 0.20, 0.10, 0.05]
+                p=[0.60, 0.20, 0.12, 0.08]
             ),
             "delivery_zone": rng.choice(
-                ["centre", "proche_banlieue", "banlieue", "rurale"],
+                ["centre", "suburb", "rural"],
                 size=n_rows,
-                p=[0.30, 0.30, 0.25, 0.15]
+                p=[0.40, 0.40, 0.20]
             ),
             "customer_type": rng.choice(
-                ["standard", "premium"],
+                ["individual", "business"],
                 size=n_rows,
-                p=[0.80, 0.20]
+                p=[0.75, 0.25]
             ),
         })
 
         # Coefficient de difficulté lié à la zone de livraison
         zone_penalty = data["delivery_zone"].map({
             "centre": 0,
-            "proche_banlieue": 0.10,
-            "banlieue": 0.25,
-            "rurale": 0.45,
+            "suburb": 0.20,
+            "rural": 0.45,
         })
 
         weather_penalty = data["weather"].map({
-            "normal": 0,
-            "pluie": 0.10,
-            "neige": 0.25,
-            "orage": 0.30,
+            "clear": 0,
+            "rain": 0.10,
+            "wind": 0.15,
+            "snow": 0.25,
         })
 
-        customer_bonus = (data["customer_type"] == "premium").astype(int) * 0.15
+        customer_bonus = (data["customer_type"] == "business").astype(int) * 0.15
 
         # Score latent simulant une décision métier
         score = (
@@ -89,7 +89,7 @@ class CollectDev(Collect):
             - zone_penalty
             - weather_penalty
             + 1.8 * data["stock_available"]
-            + 1.3 * data["carrier_capacity"]
+            + 1.3 * data["carrier_capacity"] / 50
             + customer_bonus
             - 0.40 * data["weekend"]
             - 0.08 * np.maximum(data["hour"] - 18, 0)

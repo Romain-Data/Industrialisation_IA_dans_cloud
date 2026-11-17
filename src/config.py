@@ -4,7 +4,8 @@ from pathlib import Path
 RANDOM_STATE = 42
 
 PROJECT_NAME = "eligibilite-livraison-express"
-MODEL_VERSION = "1.0.0"
+# 2.0.0 : vocabulaire des données aligné sur l'ERP (ADR-0007), incompatible avec 1.x.
+MODEL_VERSION = "2.0.0"
 DEFAULT_THRESHOLD = 0.5
 
 ARTIFACTS_DIR = Path("artifacts")

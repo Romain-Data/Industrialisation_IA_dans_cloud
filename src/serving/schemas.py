@@ -3,9 +3,16 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-Weather = Literal["normal", "pluie", "neige", "orage"]
-DeliveryZone = Literal["centre", "proche_banlieue", "banlieue", "rurale"]
-CustomerType = Literal["standard", "premium"]
+from src.domain.features import (
+    CUSTOMER_TYPE_VALUES,
+    DELIVERY_ZONE_VALUES,
+    WEATHER_VALUES,
+)
+
+# Vocabulaire de l'ERP (ADR-0007), défini une seule fois dans le domaine.
+Weather = Literal[WEATHER_VALUES]
+DeliveryZone = Literal[DELIVERY_ZONE_VALUES]
+CustomerType = Literal[CUSTOMER_TYPE_VALUES]
 
 
 class OrderFeatures(BaseModel):
@@ -28,7 +35,9 @@ class OrderFeatures(BaseModel):
     weight_kg: float = Field(ge=0, examples=[2.4])
     stock_available: Literal[0, 1] = Field(examples=[1])
     preparation_time_min: float = Field(ge=0, examples=[18])
-    carrier_capacity: float = Field(ge=0, le=1, examples=[0.85])
+    carrier_capacity: float = Field(
+        ge=0, description="Capacité disponible du transporteur (unités de l'ERP)", examples=[34.5]
+    )
     weather: Weather
     delivery_zone: DeliveryZone
     customer_type: CustomerType

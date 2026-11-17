@@ -11,6 +11,7 @@ from src.config import (
     PROMOTION_METRIC,
     REGISTERED_MODEL_NAME,
 )
+from src.domain.features import DATA_SCHEMA_VERSION
 
 
 def configure_mlflow():
@@ -27,7 +28,10 @@ def configure_mlflow():
 def promote_if_better(run_id):
     """Déplace l'alias champion sur la version du run si son ROC AUC est meilleur.
 
-    Retourne True si la version est promue. Sans champion, elle l'est d'office.
+    Retourne True si la version est promue. Elle l'est d'office s'il n'y a pas de
+    champion, ou si le champion a été entraîné sur un autre schéma de données
+    (vocabulaire différent) : ses scores ne sont pas comparables, et il ne saurait
+    pas traiter les données actuelles.
     """
     client = MlflowClient()
 
@@ -44,8 +48,9 @@ def promote_if_better(run_id):
         champion = None
 
     if champion is not None:
-        champion_score = client.get_run(champion.run_id).data.metrics[PROMOTION_METRIC]
-        if candidate_score <= champion_score:
+        champion_run = client.get_run(champion.run_id)
+        same_schema = champion_run.data.params.get("data_schema") == DATA_SCHEMA_VERSION
+        if same_schema and candidate_score <= champion_run.data.metrics[PROMOTION_METRIC]:
             return False
 
     client.set_registered_model_alias(

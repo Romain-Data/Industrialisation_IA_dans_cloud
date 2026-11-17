@@ -37,7 +37,7 @@ def clean_orders_data(df):
     cleaned = cleaned[cleaned["distance_km"] >= 0]
     cleaned = cleaned[cleaned["weight_kg"] >= 0]
     cleaned = cleaned[cleaned["preparation_time_min"] >= 0]
-    cleaned = cleaned[cleaned["carrier_capacity"].between(0, 1)]
+    cleaned = cleaned[cleaned["carrier_capacity"] >= 0]
     cleaned = cleaned[cleaned["stock_available"].isin([0, 1])]
 
     return cleaned.reset_index(drop=True)

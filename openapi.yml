@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: eligibilite-livraison-express API
-  version: 1.0.0
+  version: 2.0.0
   description: |
     API de prédiction d'éligibilité à la livraison express.
 
@@ -12,6 +12,10 @@ info:
 
     Chaque opération porte une extension `x-session` qui indique à quelle séance elle est
     livrée. Une opération de séance N n'est pas attendue avant le jour N.
+
+    Version 2.0.0 (séance 4) : le vocabulaire des commandes est aligné sur celui de l'ERP,
+    système de référence de l'entreprise (ADR-0007) : `weather`, `delivery_zone`,
+    `customer_type` et l'échelle de `carrier_capacity` changent. Incompatible avec 1.x.
   license:
     name: Usage pédagogique
 servers:
@@ -370,8 +374,8 @@ components:
           type: number
           format: double
           minimum: 0
-          maximum: 1
-          example: 0.85
+          description: Capacité disponible du transporteur, dans l'unité de l'ERP (5 à 50 en pratique)
+          example: 34.5
         weather:
           $ref: "#/components/schemas/Weather"
         delivery_zone:
@@ -381,18 +385,18 @@ components:
 
     Weather:
       type: string
-      enum: [normal, pluie, neige, orage]
-      example: normal
+      enum: [clear, rain, wind, snow]
+      example: clear
 
     DeliveryZone:
       type: string
-      enum: [centre, proche_banlieue, banlieue, rurale]
+      enum: [centre, suburb, rural]
       example: centre
 
     CustomerType:
       type: string
-      enum: [standard, premium]
-      example: premium
+      enum: [individual, business]
+      example: business
 
     OrderAccepted:
       type: object
@@ -429,7 +433,7 @@ components:
           example: 0.8734
         model_version:
           type: string
-          example: 1.0.0
+          example: 2.0.0
         predicted_at:
           type: string
           format: date-time
@@ -496,7 +500,7 @@ components:
           example: eligibilite-livraison-express
         model_version:
           type: string
-          example: 1.0.0
+          example: 2.0.0
         model_type:
           type: string
           example: Logistic regression
@@ -570,7 +574,7 @@ components:
           example: eligibilite-livraison-express
         version:
           type: string
-          example: 1.0.0
+          example: 2.0.0
 
     ReadinessStatus:
       type: object

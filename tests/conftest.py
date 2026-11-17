@@ -16,10 +16,10 @@ VALID_ORDER = {
     "weight_kg": 2.4,
     "stock_available": 1,
     "preparation_time_min": 18,
-    "carrier_capacity": 0.85,
-    "weather": "normal",
+    "carrier_capacity": 34.5,
+    "weather": "clear",
     "delivery_zone": "centre",
-    "customer_type": "premium",
+    "customer_type": "business",
 }
 
 
