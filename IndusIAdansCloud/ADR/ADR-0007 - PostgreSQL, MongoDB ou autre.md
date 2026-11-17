@@ -33,7 +33,7 @@ Nous intégrons les données de l'ERP depuis **MongoDB**, la base analytique, en
 - **ETL** : toutes les heures, une tâche importe les nouvelles commandes, les **valide** (types, bornes, valeurs autorisées) et les **nettoie** avant de les écrire dans notre base, puis dans un snapshot DuckLake pour l'entraînement (ADR-0001). Les commandes rejetées sont comptées et journalisées, pas importées.
 - **Vocabulaire** : l'ERP est le système de référence de l'entreprise ; nous **alignons** le contrat `openapi.yml`, la validation et le modèle sur ses valeurs, et réentraînons le modèle.
 - **Orchestration** : l'ETL et le réentraînement sont des flows **Prefect** (ADR à venir), pas des étapes de la CI/CD : l'entraînement est un processus d'exécution, pas de construction de l'application.
-- **Cible** : la provenance de l'étiquette `express_eligible` est en attente de la réponse de l'intervenant. Tant qu'elle n'est pas tranchée, les commandes ERP servent à la prédiction et à l'API, pas à l'entraînement.
+- **Cible** : l'étiquette `express_eligible`, absente du jeu fourni, est calculée par la règle du notebook adaptée à l'ERP (voir Mise en œuvre).
 
 ### Justification
 
@@ -57,7 +57,6 @@ Nous intégrons les données de l'ERP depuis **MongoDB**, la base analytique, en
 - **Moins d'historique** : pas de données avant 2023.
 - **Changement incompatible** : aligner le vocabulaire modifie le contrat d'API (valeurs `weather`, `delivery_zone`, `customer_type`, bornes de `carrier_capacity`) ; le modèle actuel, entraîné sur l'ancien vocabulaire, doit être remplacé. Version majeure de l'API.
 - **Nouvelle dépendance** : `pymongo`, et un service MongoDB à faire tourner dans nos environnements de test.
-- **Sans cible**, l'entraînement sur les données ERP est bloqué pour l'instant.
 
 **Neutres**
 - MongoDB n'impose pas de schéma : toute la validation repose sur notre ETL, qui doit être strict (le cours : « ne pas faire confiance à la qualité des données »).
@@ -79,12 +78,13 @@ Nous intégrons les données de l'ERP depuis **MongoDB**, la base analytique, en
 
 ## Mise en œuvre (2026-11-17)
 
-- **Lecture** : contrat `OrderRepository` (`src/abstraction/order_repository.py`) et `MongoOrderRepository` : `get`, `get_all`, `get_after` (import incrémental, identifiants ERP de longueur fixe), `ping`, sans `save`. Testé contre un vrai MongoDB 8 alimenté par le simulateur ; un service MongoDB tourne dans la CI.
+- **Lecture** : contrat `OrderRepository` (`src/abstraction/order_repository.py`) **aligné sur la correction de l'enseignant** : `save`, `get`, `get_all`, `count`, `get_training_data` (commandes et cibles séparées, la cible ne faisant pas partie de l'entité), plus `get_labeled_after` (import incrémental) et `ping`. Il manipule des entités du domaine (`OrderEntity`, `src/domain/entities.py`) et ne lève que des erreurs du domaine (`src/domain/exceptions.py`) : `save` lève `ReadOnlyRepositoryError` (lecture seule), une panne de MongoDB devient `RepositoryUnavailableError`. `MongoOrderRepository` est testé contre un vrai MongoDB 8 alimenté par le simulateur ; un service MongoDB tourne dans la CI.
+- **Cible** : l'oubli du jeu fourni est corrigé (confirmé par l'enseignant). La règle de calcul du notebook (cellule 8, identique dans la correction) est extraite dans `src/domain/eligibility.py`, adaptée au vocabulaire de l'ERP, et le simulateur en applique une copie (tirage déterministe par commande) : `express_eligible` est présente dans PostgreSQL et MongoDB. Un test vérifie que les deux règles concordent. Les commandes écrites avant cet ajout n'ont pas de cible : elles sont exclues de l'entraînement.
 - **Vocabulaire** : défini une seule fois dans le domaine (`src/domain/features.py` : `WEATHER_VALUES`, `DELIVERY_ZONE_VALUES`, `CUSTOMER_TYPE_VALUES`), repris par le schéma Pydantic, le contrat `openapi.yml` (version **2.0.0**) et la validation du domaine, qui refuse toute catégorie inconnue. `carrier_capacity` n'est plus borné à 1, seulement positif.
 - **Données synthétiques** : le générateur de dev produit le vocabulaire et l'échelle de l'ERP ; ses coefficients (`wind` 0,15, `suburb` 0,20, `business` +0,15, capacité ramenée sur 50) sont des hypothèses de simulation, à remplacer si l'intervenant fournit une règle d'étiquetage.
 - **Modèles** : chaque run enregistre `data_schema = erp-v1` ; un champion entraîné sur l'ancien vocabulaire est remplacé d'office au premier entraînement (ADR-0002, mise à jour du 2026-11-17).
 - **Données existantes** : les quelques commandes de test enregistrées en preprod avec l'ancien vocabulaire seraient refusées par la validation lors d'un entraînement `TRAINING_SOURCE=ducklake` ; preprod et prod restent en `synthetic`.
-- **Reste à faire** : l'ETL (validation, nettoyage, import horaire), les compose Test et Prod, l'orchestration Prefect, la cible.
+- **Reste à faire** : l'ETL (validation, nettoyage, import horaire), les compose Test et Prod, l'orchestration Prefect.
 
 ## Links
 

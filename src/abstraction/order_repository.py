@@ -1,31 +1,53 @@
-"""Contrat de lecture des commandes d'un système source (ERP), ADR-0007."""
+"""Contrat de lecture des commandes d'un système source (ERP), aligné sur la correction."""
 
 from abc import ABC, abstractmethod
 
+from src.domain.entities import OrderEntity
+
 
 class OrderRepository(ABC):
-    """Commandes d'un système source, en lecture seule.
+    """Commandes d'un système source, exposées en entités du domaine.
 
-    Contrairement à OrderStore (nos propres commandes), ce dépôt ne fait que lire :
-    l'application n'écrit jamais dans la base de l'ERP (ADR-0007). Les commandes sont
-    renvoyées brutes, au format du système source ; leur validation et leur nettoyage
-    sont faits par l'ETL qui les importe.
+    Contrat de la correction de l'enseignant (`save`, `get`, `get_all`, `count`,
+    `get_training_data`), plus la lecture incrémentale utile à l'ETL et une sonde.
+
+    - `get` renvoie None pour un identifiant inconnu, sans lever d'exception ;
+    - les erreurs levées sont celles de `src.domain.exceptions`, jamais celles de
+      la bibliothèque de stockage : l'application ne connaît pas l'infrastructure ;
+    - la cible n'est pas dans `OrderEntity` : elle est fournie à part.
     """
 
     @abstractmethod
-    def get(self, order_id: str) -> dict | None:
+    def save(self, order: OrderEntity) -> None:
+        """Enregistre une commande sans créer de doublon (clé : order_id).
+
+        Un dépôt en lecture seule lève ReadOnlyRepositoryError.
+        """
+
+    @abstractmethod
+    def get(self, order_id: str) -> OrderEntity | None:
         """Retourne la commande, ou None si elle est inconnue."""
 
     @abstractmethod
-    def get_all(self, limit: int | None = None) -> list[dict]:
-        """Retourne les commandes triées par identifiant (toutes, ou les `limit` premières)."""
+    def get_all(self) -> list[OrderEntity]:
+        """Retourne toutes les commandes, triées par identifiant."""
 
     @abstractmethod
-    def get_after(self, last_order_id: str | None, limit: int) -> list[dict]:
-        """Retourne au plus `limit` commandes d'identifiant strictement supérieur à `last_order_id`.
+    def count(self) -> int:
+        """Retourne le nombre de commandes."""
 
+    @abstractmethod
+    def get_training_data(self) -> tuple[list[OrderEntity], list[int]]:
+        """Retourne les commandes qui ont une cible, et leurs cibles dans le même ordre."""
+
+    @abstractmethod
+    def get_labeled_after(
+        self, last_order_id: str | None, limit: int
+    ) -> list[tuple[OrderEntity, int | None]]:
+        """Au plus `limit` commandes d'identifiant strictement supérieur à `last_order_id`.
+
+        Chaque commande est accompagnée de sa cible (None si elle n'en a pas).
         Sert à l'import incrémental : on reprend après la dernière commande importée.
-        Avec None, on part du début.
         """
 
     @abstractmethod
