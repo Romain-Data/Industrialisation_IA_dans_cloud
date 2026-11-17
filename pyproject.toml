@@ -32,7 +32,8 @@ dev = [
 
 [tool.ruff]
 # Notebooks exploratoires : hors du lint de la CI.
-extend-exclude = ["*.ipynb"]
+# Simulateur ERP : code fourni par le cours, système externe à l'application.
+extend-exclude = ["*.ipynb", "erp_simulator"]
 
 [tool.ruff.lint.flake8-bugbear]
 # Injection de dépendances FastAPI : Depends() en valeur par défaut est voulu.
