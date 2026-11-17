@@ -1,0 +1,116 @@
+# Environnement de PROD : images publiées par la CI/CD, branchées sur l'ERP de l'entreprise.
+#
+# Différences avec docker-compose.test.yml :
+#   - images promues par la pipeline (APP_VERSION, ex. 0.2.0), jamais construites ici ;
+#   - pas d'ERP simulé : la base analytique MongoDB de l'ERP est externe (ERP_MONGO_URI) ;
+#   - secrets et réglages obligatoires, aucune valeur par défaut (ADR-0005) ;
+#   - limites de mémoire et de CPU (VPS partagé, ADR-0003), redémarrage automatique ;
+#   - seul le port de l'API est publié, et uniquement en local (le proxy HTTPS est devant) ;
+#     l'interface Prefect reste sur 127.0.0.1 (accès par tunnel SSH, ADR-0009).
+#
+# Variables à fournir (fichier .env non commité, ou variables Coolify) :
+#   APP_VERSION, POSTGRES_PASSWORD, ERP_MONGO_URI
+#   docker compose -f docker-compose.prod.yml up -d
+
+name: express-delivery-prod
+
+x-app-env: &app-env
+  PGPASSWORD: ${POSTGRES_PASSWORD:?définir POSTGRES_PASSWORD}
+  DATABASE_URL: postgresql+psycopg://express@postgres:5432/orders
+  MLFLOW_TRACKING_URI: postgresql+psycopg://express@postgres:5432/mlflow
+  MLFLOW_ARTIFACT_ROOT: file:///app/mlartifacts
+  DUCKLAKE_CATALOG_URL: postgresql+psycopg://express@postgres:5432/ducklake
+  ERP_MONGO_URI: ${ERP_MONGO_URI:?définir ERP_MONGO_URI (base analytique de l'ERP)}
+  TRAINING_SOURCE: ducklake
+  ERP_PIPELINE_CRON: ${ERP_PIPELINE_CRON:-0 * * * *}
+  RETRAIN_MIN_NEW_ORDERS: ${RETRAIN_MIN_NEW_ORDERS:-500}
+  MODEL_RELOAD_INTERVAL_SECONDS: "60"
+  PREFECT_API_URL: http://prefect-server:4200/api
+
+x-app-volumes: &app-volumes
+  - mlartifacts:/app/mlartifacts
+  - ducklake:/app/ducklake
+
+x-image: &image ghcr.io/romain-data/industrialisation_ia_dans_cloud:${APP_VERSION:?définir APP_VERSION (version publiée, ex. 0.2.0)}
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: express
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?définir POSTGRES_PASSWORD}
+      POSTGRES_DB: orders
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U express -d orders"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: {memory: 256m, cpus: "0.5"}
+
+  migrate:
+    image: *image
+    command: ["migrate"]
+    environment: *app-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    image: *image
+    command: ["api"]
+    environment: *app-env
+    volumes: *app-volumes
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: {memory: 1g, cpus: "1"}
+
+  prefect-server:
+    image: prefecthq/prefect:3.9.3-python3.12
+    command: ["prefect", "server", "start", "--host", "0.0.0.0"]
+    ports:
+      - "127.0.0.1:${PREFECT_PORT:-4200}:4200"
+    volumes:
+      - prefect:/root/.prefect
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4200/api/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: {memory: 512m, cpus: "0.5"}
+
+  orchestrator:
+    image: ghcr.io/romain-data/industrialisation_ia_dans_cloud-orchestrator:${APP_VERSION:?définir APP_VERSION}
+    command: ["orchestrator"]
+    environment: *app-env
+    volumes: *app-volumes
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      prefect-server:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        # L'entraînement charge les données en mémoire : plus que l'API.
+        limits: {memory: 1536m, cpus: "1"}
+
+volumes:
+  pgdata:
+  mlartifacts:
+  ducklake:
+  prefect:
