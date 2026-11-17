@@ -9,22 +9,28 @@ from src.config import (
     TRAINING_SOURCE,
 )
 from src.domain.cleaning import clean_orders_data
-from src.domain.validation import validate_dataset
+from src.domain.validation import validate_columns, validate_dataset
 from src.training.registry import promote_if_better
 from src.training.train import train_model
 
 
 def run_training(collector: Collect):
-    """Collecte, valide, nettoie les données, entraîne puis sauvegarde le modèle."""
+    """Collecte, nettoie puis valide les données, entraîne et promeut le modèle.
+
+    La structure est vérifiée avant le nettoyage ; le nettoyage écarte les lignes
+    invalides (le nombre est enregistré dans le run) ; la validation stricte vient après.
+    """
     raw_orders = collector.collect_data()
-    validate_dataset(raw_orders)
+    validate_columns(raw_orders)
 
     orders_clean = clean_orders_data(raw_orders)
     validate_dataset(orders_clean)
+    dropped = len(raw_orders) - len(orders_clean)
+    if dropped:
+        print(f"Nettoyage : {dropped} lignes écartées sur {len(raw_orders)}.")
 
-    model_pipeline, metrics, run_id = train_model(
-        orders_clean, params=getattr(collector, "tracking_params", None)
-    )
+    params = {**(getattr(collector, "tracking_params", None) or {}), "rows_dropped": dropped}
+    model_pipeline, metrics, run_id = train_model(orders_clean, params=params)
     promoted = promote_if_better(run_id)
 
     print("Entraînement terminé.")

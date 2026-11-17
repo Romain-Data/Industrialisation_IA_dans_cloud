@@ -35,6 +35,18 @@ class OrderStore(ABC):
         """
 
     @abstractmethod
+    def import_orders(self, orders: list[dict]) -> int:
+        """Insère des commandes importées, en ignorant celles déjà présentes (même order_id).
+
+        Chaque commande porte ses caractéristiques, `created_at` (date de la source) et
+        `express_eligible` (cible, ou None). Retourne le nombre de commandes insérées.
+        """
+
+    @abstractmethod
+    def last_order_id(self, prefix: str) -> str | None:
+        """Plus grand identifiant de commande commençant par `prefix`, ou None."""
+
+    @abstractmethod
     def ping(self) -> bool:
         """Indique si le stockage est joignable."""
 
