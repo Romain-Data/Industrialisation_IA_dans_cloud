@@ -1,6 +1,6 @@
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -124,7 +124,7 @@ def create_order(
     event = OrderEvent(
         event_id=str(uuid.uuid4()),
         event_type="order.created",
-        occurred_at=datetime.now(timezone.utc),
+        occurred_at=datetime.now(UTC),
         order=OrderFeatures(**order_data),
     )
     order_queue.publish(event.model_dump(mode="json"))

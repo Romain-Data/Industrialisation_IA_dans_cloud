@@ -24,6 +24,14 @@ dev = [
     "ruff>=0.17.5",
 ]
 
+[tool.ruff]
+# Notebooks exploratoires : hors du lint de la CI.
+extend-exclude = ["*.ipynb"]
+
+[tool.ruff.lint.flake8-bugbear]
+# Injection de dépendances FastAPI : Depends() en valeur par défaut est voulu.
+extend-immutable-calls = ["fastapi.Depends"]
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]

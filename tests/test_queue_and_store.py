@@ -1,6 +1,7 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 from src.abstraction.order_queue import OrderQueue
 from src.abstraction.order_store import DuplicateOrderError
@@ -27,7 +28,7 @@ def make_prediction(order_id="CMD-000001", probability=0.8):
         "decision": "oui",
         "probability": probability,
         "model_version": "1.0.0",
-        "predicted_at": datetime.now(timezone.utc),
+        "predicted_at": datetime.now(UTC),
         "latency_ms": 1.5,
     }
 
@@ -56,7 +57,7 @@ def test_store_rejects_duplicate_order_id(store, order):
 def test_store_rejects_invalid_flag(store, order):
     order["stock_available"] = 3
 
-    with pytest.raises(Exception):
+    with pytest.raises(IntegrityError):
         store.save(order)
 
 

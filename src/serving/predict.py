@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pandas as pd
 
@@ -38,5 +38,5 @@ def predict_order_eligibility(order_data, model, threshold=DEFAULT_THRESHOLD):
         "decision": "oui" if eligible else "non",
         "probability": round(probability, 4),
         "model_version": MODEL_VERSION,
-        "prediction_timestamp": datetime.now(timezone.utc).isoformat(),
+        "prediction_timestamp": datetime.now(UTC).isoformat(),
     }

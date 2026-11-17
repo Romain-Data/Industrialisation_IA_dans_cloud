@@ -1,9 +1,9 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
-    Boolean,
     Float,
     Integer,
     String,
@@ -45,7 +45,7 @@ class OrderRecord(Base):
     delivery_zone: Mapped[str] = mapped_column(String)
     customer_type: Mapped[str] = mapped_column(String)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
 
 
@@ -99,7 +99,7 @@ class SqlAlchemyOrderStore(OrderStore):
         try:
             with self._engine.connect() as connection:
                 connection.execute(text("SELECT 1"))
-        except Exception:
+        except Exception:  # noqa: BLE001 - sonde de santé : toute erreur = base injoignable
             return False
 
         return True
@@ -124,7 +124,7 @@ class SqlAlchemyOrderStore(OrderStore):
             # SQLite ne conserve pas le fuseau horaire.
             if prediction["predicted_at"].tzinfo is None:
                 prediction["predicted_at"] = prediction["predicted_at"].replace(
-                    tzinfo=timezone.utc
+                    tzinfo=UTC
                 )
 
             return prediction
@@ -132,5 +132,5 @@ class SqlAlchemyOrderStore(OrderStore):
     def schema_is_current(self):
         try:
             return current_revision(self._engine) == head_revision()
-        except Exception:
+        except Exception:  # noqa: BLE001 - sonde de santé : toute erreur = schéma non vérifiable
             return False
