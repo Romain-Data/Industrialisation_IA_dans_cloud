@@ -1,0 +1,70 @@
+# Stack locale, même image et même configuration qu'en production (ADR-0003) :
+# PostgreSQL (commandes, registre MLflow, catalogue DuckLake) + API + entraînement à la demande.
+#
+#   docker compose up -d --build          # PostgreSQL + API sur http://localhost:8000
+#   docker compose run --rm train         # entraînement (synthétique par défaut), puis :
+#   docker compose restart api            # l'API charge le nouveau champion au démarrage
+#   docker compose down                   # arrêt (ajouter -v pour effacer les données)
+#
+# Variables surchargeables (shell ou fichier .env, lu automatiquement par Compose) :
+#   POSTGRES_PASSWORD, API_PORT, POSTGRES_PORT, TRAINING_SOURCE
+
+x-app: &app
+  build: .
+  image: express-delivery:local
+  environment:
+    DATABASE_URL: postgresql+psycopg://express:${POSTGRES_PASSWORD:-express}@postgres:5432/orders
+    MLFLOW_TRACKING_URI: postgresql+psycopg://express:${POSTGRES_PASSWORD:-express}@postgres:5432/mlflow
+    MLFLOW_ARTIFACT_ROOT: file:///app/mlartifacts
+    DUCKLAKE_CATALOG_URL: postgresql+psycopg://express:${POSTGRES_PASSWORD:-express}@postgres:5432/ducklake
+    TRAINING_SOURCE: ${TRAINING_SOURCE:-synthetic}
+  volumes:
+    # Volumes partagés entre l'API et l'entraînement, comme les volumes Coolify en prod.
+    - mlartifacts:/app/mlartifacts
+    - ducklake:/app/ducklake
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: express
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-express}
+      POSTGRES_DB: orders
+    ports:
+      # Exposé sur la machine pour `mlflow ui` et les outils SQL (5433 : évite un PostgreSQL local).
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U express -d orders"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    <<: *app
+    command: ["api"]
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: "1"
+
+  train:
+    <<: *app
+    command: ["train"]
+    # Tâche ponctuelle : lancée par `docker compose run --rm train`, jamais par `up`.
+    profiles: ["train"]
+    restart: "no"
+
+volumes:
+  pgdata:
+  mlartifacts:
+  ducklake:
