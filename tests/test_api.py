@@ -196,7 +196,18 @@ def test_session_1_routes_are_implemented(client):
 
 
 @pytest.mark.parametrize(
-    "schema", ["OrderFeatures", "Prediction", "OrderAccepted", "HealthStatus", "ReadinessStatus", "Error"]
+    "schema",
+    [
+        "OrderFeatures",
+        "OrderOutcome",
+        "OrderOutcomeRecorded",
+        "Prediction",
+        "OrderAccepted",
+        "HealthStatus",
+        "ModelCard",
+        "ReadinessStatus",
+        "Error",
+    ],
 )
 def test_schemas_match_contract(client, schema):
     generated = client.get("/openapi.json").json()["components"]["schemas"][schema]
@@ -212,3 +223,17 @@ def test_order_event_matches_contract():
 
     assert set(generated["properties"]) == set(expected["properties"])
     assert expected["required"] and set(expected["required"]) <= set(generated["required"])
+
+
+def test_model_card_describes_the_served_model(client):
+    response = client.get("/v1/model")
+
+    assert response.status_code == 200
+    assert response.json()["metrics"] == {"roc_auc": 0.9}
+
+
+def test_model_card_without_model_is_503(client_without_model):
+    response = client_without_model.get("/v1/model")
+
+    assert response.status_code == 503
+    assert response.json()["error"] == "model_unavailable"

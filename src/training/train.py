@@ -24,7 +24,7 @@ from src.domain.features import (
 from src.training.registry import configure_mlflow
 
 
-def train_model(df):
+def train_model(df, params=None):
     X = df[FEATURE_COLUMNS]
     y = df[TARGET_COLUMN]
 
@@ -112,6 +112,9 @@ def train_model(df):
         mlflow.log_param("model_type", "LogisticRegression")
         mlflow.log_param("random_state", RANDOM_STATE)
         mlflow.log_param("feature_count", len(FEATURE_COLUMNS))
+        mlflow.log_param("training_rows", len(df))
+        # Provenance des données (ex. numéro de snapshot DuckLake).
+        mlflow.log_params(params or {"data_source": "synthetic"})
 
         for metric_name, metric_value in metrics.items():
             mlflow.log_metric(metric_name, metric_value)

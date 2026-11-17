@@ -132,6 +132,50 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
+  /v1/orders/{order_id}/outcome:
+    put:
+      tags: [orders]
+      operationId: recordOrderOutcome
+      summary: Enregistrer le résultat réel d'une commande
+      description: |
+        Indique si la commande a réellement pu partir en livraison express. Ce résultat
+        observé est la cible d'entraînement : seules les commandes qui en ont un sont
+        exportées vers les snapshots DuckLake (ADR-0001). Idempotent : un nouvel appel
+        remplace le résultat précédent.
+      x-session: 3
+      parameters:
+        - name: order_id
+          in: path
+          required: true
+          schema:
+            type: string
+            example: CMD-000001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrderOutcome"
+      responses:
+        "200":
+          description: Résultat enregistré
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderOutcomeRecorded"
+        "404":
+          description: Commande inconnue
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: Corps invalide
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   /v1/predictions:
     post:
       tags: [predictions]
@@ -234,6 +278,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ModelCard"
+        "503":
+          description: Aucun modèle en service
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   /metrics:
     get:
@@ -410,6 +460,31 @@ components:
         count:
           type: integer
           example: 3
+
+    OrderOutcome:
+      type: object
+      description: Résultat observé d'une commande (cible d'entraînement).
+      additionalProperties: false
+      required: [express_eligible]
+      properties:
+        express_eligible:
+          type: boolean
+          description: La commande est-elle réellement partie en livraison express ?
+          example: true
+
+    OrderOutcomeRecorded:
+      type: object
+      required: [order_id, express_eligible, recorded_at]
+      properties:
+        order_id:
+          type: string
+          example: CMD-000001
+        express_eligible:
+          type: boolean
+          example: true
+        recorded_at:
+          type: string
+          format: date-time
 
     ModelCard:
       type: object

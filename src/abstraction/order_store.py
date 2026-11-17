@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
 
+import pandas as pd
+
 
 class DuplicateOrderError(Exception):
     """Une commande avec cet identifiant existe déjà."""
@@ -14,6 +16,20 @@ class OrderStore(ABC):
     @abstractmethod
     def get(self, order_id: str) -> dict | None:
         """Retourne la commande, ou None si elle est inconnue."""
+
+    @abstractmethod
+    def record_outcome(self, order_id: str, express_eligible: bool) -> dict | None:
+        """Enregistre le résultat observé d'une commande (cible d'entraînement).
+
+        Retourne le résultat enregistré, ou None si la commande est inconnue.
+        """
+
+    @abstractmethod
+    def export_labeled_orders(self) -> pd.DataFrame:
+        """Commandes dont le résultat est connu, au format d'entraînement.
+
+        Colonnes : order_id, order_date, les FEATURE_COLUMNS et la cible.
+        """
 
     @abstractmethod
     def ping(self) -> bool:

@@ -25,3 +25,7 @@ mlartifacts/
 artifacts/
 
 .env
+
+# DuckLake (dev)
+ducklake_data/
+*.sqlite

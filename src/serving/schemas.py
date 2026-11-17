@@ -49,6 +49,23 @@ class OrderAccepted(BaseModel):
     status: Literal["accepted"]
 
 
+class OrderOutcome(BaseModel):
+    """Résultat observé d'une commande (cible d'entraînement)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    express_eligible: bool = Field(
+        description="La commande est-elle réellement partie en livraison express ?",
+        examples=[True],
+    )
+
+
+class OrderOutcomeRecorded(BaseModel):
+    order_id: str
+    express_eligible: bool
+    recorded_at: datetime
+
+
 class Prediction(BaseModel):
     order_id: str
     express_eligible: bool
@@ -59,6 +76,21 @@ class Prediction(BaseModel):
     latency_ms: float | None = Field(
         default=None, description="Temps de calcul de la prédiction"
     )
+
+
+class ModelCard(BaseModel):
+    """Model card de la cellule 55 du notebook."""
+
+    project: str
+    model_version: str
+    model_type: str
+    task: str
+    target: str
+    threshold: float
+    trained_at: datetime | None = None
+    features: list[str]
+    metrics: dict[str, float]
+    limitations: list[str] | None = None
 
 
 class HealthStatus(BaseModel):

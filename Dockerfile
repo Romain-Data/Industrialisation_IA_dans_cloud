@@ -28,10 +28,12 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/app/.venv/bin:$PATH" \
     PORT=8000 \
-    GIT_PYTHON_REFRESH=quiet
+    GIT_PYTHON_REFRESH=quiet \
+    MLFLOW_DISABLE_AGENT_HINT=1
 
-# curl : utilisé par le health check de Coolify (ADR-0003).
+# Correctifs de sécurité Debian (scan Trivy en CI) + curl, utilisé par le health check de Coolify.
 RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
     && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
@@ -45,12 +47,19 @@ COPY --chown=app:app migrations ./migrations
 COPY --chown=app:app src ./src
 COPY --chown=app:app docker-entrypoint.sh ./
 
-# /app/mlartifacts : racine des artefacts MLflow par défaut (volume en prod, ADR-0003).
+# /app/mlartifacts : racine des artefacts MLflow (volume en prod, ADR-0003).
+# /app/ducklake    : fichiers Parquet des snapshots d'entraînement (volume en prod, ADR-0001).
 RUN chmod +x docker-entrypoint.sh \
-    && mkdir -p /app/mlartifacts \
-    && chown app:app /app /app/mlartifacts
+    && mkdir -p /app/mlartifacts /app/ducklake \
+    && chown app:app /app /app/mlartifacts /app/ducklake
 
 USER app
+
+# Extensions DuckDB installées au build : aucun téléchargement au démarrage en prod.
+# Catalogue DuckLake PostgreSQL en prod : l'extension sqlite (dev) n'est pas embarquée.
+RUN python -c "import duckdb; c = duckdb.connect(); [c.install_extension(e) for e in ('ducklake', 'postgres')]"
+
+ENV DUCKLAKE_DATA_PATH=/app/ducklake/
 
 EXPOSE 8000
 

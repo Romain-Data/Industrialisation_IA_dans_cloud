@@ -75,6 +75,15 @@ Deux options ont été envisagées pour DuckLake :
 1. **Retenue** : base transactionnelle pour les commandes, DuckLake pour les snapshots d'entraînement.
 2. **Écartée** : commandes directement dans une table DuckLake, car le format n'est pas conçu pour des mises à jour fréquentes de statut.
 
+## Mise en œuvre (2026-11-17)
+
+- **Cible d'entraînement** : la table `commandes` ne contenait que les caractéristiques, pas le résultat. La migration `0002` ajoute `express_eligible` (0/1, nullable) et `outcome_recorded_at`. Le résultat observé est enregistré par `PUT /v1/orders/{order_id}/outcome` ; seules les commandes qui en ont un sont exportées.
+- **Export** : `OrderStore.export_labeled_orders()` (SQLAlchemy, aucun SQL hors de la couche d'accès) produit un DataFrame au format d'entraînement, avec `created_at` comme `order_date`.
+- **Snapshots** : `DuckLakeSnapshotStore` (abstraction `TrainingSnapshotStore`) remplace le contenu de la table `commandes_entrainement` dans une transaction ; chaque écriture crée un snapshot relisible avec `AT (VERSION => n)`. Catalogue configuré par `DUCKLAKE_CATALOG_URL` (URL SQLAlchemy : SQLite en dev, base `ducklake` du PostgreSQL du projet en prod, créée au démarrage), fichiers Parquet dans `DUCKLAKE_DATA_PATH` (volume `/app/ducklake` en prod).
+- **Entraînement** : `TRAINING_SOURCE=ducklake` fige les commandes étiquetées dans un nouveau snapshot puis entraîne dessus ; le numéro du snapshot est enregistré dans le run MLflow (`ducklake_snapshot`), ce qui permet de rejouer un entraînement à l'identique. `TRAINING_SOURCE=synthetic` (par défaut) garde le générateur de dev. Au moins 50 commandes étiquetées sont exigées.
+- **Spike réalisé** : DuckDB 2.0 + DuckLake, catalogue SQLite et PostgreSQL, time travel vérifié. Les extensions DuckDB sont installées au build de l'image (pas de téléchargement en prod). La lecture des dates avec fuseau demande `pytz`, absent avec pandas 3 : les dates sont stockées en UTC sans fuseau.
+- **Pas encore fait** : politique de rétention des snapshots, planification de l'export.
+
 ## Links
 
 - External references :
