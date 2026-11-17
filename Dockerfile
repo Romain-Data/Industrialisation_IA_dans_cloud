@@ -30,6 +30,11 @@ ENV PYTHONUNBUFFERED=1 \
     PORT=8000 \
     GIT_PYTHON_REFRESH=quiet
 
+# curl : utilisé par le health check de Coolify (ADR-0003).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN groupadd --system app && useradd --system --gid app --home-dir /app app
 
 WORKDIR /app

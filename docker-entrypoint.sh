@@ -8,13 +8,16 @@ set -e
 
 case "$1" in
   api)
+    python -m src.infrastructure.bootstrap
     alembic upgrade head
     exec uvicorn src.serving.api:app --host 0.0.0.0 --port "${PORT:-8000}"
     ;;
   train)
+    python -m src.infrastructure.bootstrap
     exec python -m src.training.pipeline
     ;;
   migrate)
+    python -m src.infrastructure.bootstrap
     exec alembic upgrade head
     ;;
   *)
