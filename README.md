@@ -128,6 +128,18 @@ TRAINING_SOURCE=ducklake uv run python -m src.training.pipeline
 
 Chaque run MLflow enregistre ses métriques, la liste des variables et la provenance des données (numéro de snapshot DuckLake). L'API charge le champion **au démarrage** : il faut la redémarrer après un entraînement qui le change. Pour revenir à un modèle précédent, il suffit de replacer l'alias `champion` sur une version antérieure dans MLflow, puis de redémarrer l'API.
 
+## Import des commandes de l'ERP
+
+L'ERP de l'entreprise est simulé par [`erp_simulator/`](erp_simulator/) (PostgreSQL de production et MongoDB analytique). Nous lisons **MongoDB en lecture seule** ([ADR-0007](IndusIAdansCloud/ADR/ADR-0007%20-%20PostgreSQL%2C%20MongoDB%20ou%20autre.md)) par un ETL incrémental et idempotent :
+
+```bash
+docker compose -f erp_simulator/docker-compose.erp.yml up -d --build   # ERP simulé
+ERP_MONGO_URI=mongodb://localhost:27017 uv run python -m src.etl.erp_import
+TRAINING_SOURCE=ducklake uv run python -m src.training.pipeline         # entraînement sur ces données
+```
+
+Chaque commande est nettoyée puis validée ; les commandes invalides sont rejetées et comptées. Chaque import est consigné dans la table `erp_imports` (position de reprise et compteurs).
+
 ## Configuration
 
 Toute la configuration passe par des variables d'environnement ([`src/config.py`](src/config.py)).
@@ -142,6 +154,7 @@ Toute la configuration passe par des variables d'environnement ([`src/config.py`
 | `TRAINING_SOURCE` | `synthetic` | Source de l'entraînement (`synthetic` ou `ducklake`) |
 | `ERP_MONGO_URI` | `mongodb://localhost:27017` | Base analytique MongoDB de l'ERP, lue en lecture seule (ADR-0007) |
 | `ERP_MONGO_DATABASE` / `ERP_MONGO_COLLECTION` | `livraison_express` / `orders` | Base et collection des commandes ERP |
+| `ERP_IMPORT_BATCH_SIZE` | `1000` | Taille des lots lus par l'ETL ERP |
 | `PORT` | `8000` | Port de l'API dans le conteneur |
 
 En PostgreSQL, les URL utilisent le driver psycopg 3 : `postgresql+psycopg://utilisateur@hôte:5432/base`. Le mot de passe peut être fourni par la variable standard `PGPASSWORD` plutôt que dans l'URL (c'est ce que fait `docker-compose.yml`). Au démarrage, le conteneur crée les bases `mlflow` et `ducklake` si elles n'existent pas, puis applique les migrations.
@@ -162,7 +175,7 @@ Le dépôt suit **GitFlow** (détails dans [CONTRIBUTING.md](CONTRIBUTING.md)). 
 2. sur `develop` et sur une GitHub Release : construit l'image `linux/amd64`, vérifie qu'elle démarre, la scanne avec Trivy, la publie sur `ghcr.io/romain-data/industrialisation_ia_dans_cloud` (tags `sha-xxxxxxx` et `X.Y.Z`) ;
 3. déploie avec Coolify : `develop` → preprod, release → prod. Coolify ne met la nouvelle version en service que si `/health/ready` répond.
 
-L'image Docker ([`Dockerfile`](Dockerfile)) est construite en deux étapes avec uv, tourne avec un utilisateur non root et sert à la fois l'API (`api`, par défaut), l'entraînement (`train`) et les migrations (`migrate`).
+L'image Docker ([`Dockerfile`](Dockerfile)) est construite en deux étapes avec uv, tourne avec un utilisateur non root et sert à la fois l'API (`api`, par défaut), l'entraînement (`train`), l'import de l'ERP (`etl`) et les migrations (`migrate`).
 
 ## Structure du dépôt
 

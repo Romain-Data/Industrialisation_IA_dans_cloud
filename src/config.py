@@ -25,6 +25,7 @@ TRAINING_SOURCE = os.getenv("TRAINING_SOURCE", "synthetic")
 ERP_MONGO_URI = os.getenv("ERP_MONGO_URI", "mongodb://localhost:27017")
 ERP_MONGO_DATABASE = os.getenv("ERP_MONGO_DATABASE", "livraison_express")
 ERP_MONGO_COLLECTION = os.getenv("ERP_MONGO_COLLECTION", "orders")
+ERP_IMPORT_BATCH_SIZE = int(os.getenv("ERP_IMPORT_BATCH_SIZE", "1000"))
 
 # Registre de modèles MLflow : SQLite en dev, PostgreSQL en prod (ADR-0002).
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "sqlite:///mlflow.db")

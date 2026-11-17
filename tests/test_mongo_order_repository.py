@@ -184,3 +184,22 @@ def test_unreachable_mongodb_raises_a_domain_error():
     with pytest.raises(RepositoryUnavailableError, match="injoignable"):
         repository.get("ERP-00000001")
     repository.close()
+
+
+# --- ETL de bout en bout depuis MongoDB ------------------------------------------------------
+
+
+def test_etl_imports_mongodb_orders_into_our_database(erp, database_url):
+    from src.etl.erp_import import import_erp_orders
+    from src.infrastructure.import_journal import SqlAlchemyImportJournal
+    from src.infrastructure.order_store import SqlAlchemyOrderStore
+
+    store = SqlAlchemyOrderStore(database_url)
+    journal = SqlAlchemyImportJournal(database_url)
+
+    report = import_erp_orders(erp["repository"], store, journal, batch_size=12)
+    rerun = import_erp_orders(erp["repository"], store, journal)
+
+    assert (report.read, report.imported, report.rejected) == (40, 40, 0)
+    assert rerun.read == 0
+    assert len(store.export_labeled_orders()) == 40

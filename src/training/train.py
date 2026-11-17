@@ -124,7 +124,7 @@ def train_model(df, params=None):
         # Schéma des données (vocabulaire) : la promotion ne compare que des modèles du même schéma.
         mlflow.log_param("data_schema", DATA_SCHEMA_VERSION)
         # Provenance des données (ex. numéro de snapshot DuckLake).
-        mlflow.log_params(params or {"data_source": "synthetic"})
+        mlflow.log_params({"data_source": "synthetic", **(params or {})})
 
         for metric_name, metric_value in metrics.items():
             mlflow.log_metric(metric_name, metric_value)

@@ -35,6 +35,22 @@ def _check_value_ranges(df):
             )
 
 
+REQUIRED_COLUMNS = {
+    "order_id",
+    "order_date",
+    *FEATURE_COLUMNS,
+    "express_eligible",
+}
+
+
+def validate_columns(df):
+    """Contrôle de structure avant nettoyage : toutes les colonnes attendues sont présentes."""
+    missing_columns = REQUIRED_COLUMNS - set(df.columns)
+    if missing_columns:
+        raise ValueError(f"Colonnes obligatoires absentes : {sorted(missing_columns)}")
+    return True
+
+
 def validate_dataset(df):
     """
     Contrôles de qualité élémentaires sur les données d'entrée.
