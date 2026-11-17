@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 from src.abstraction.collect import Collect
+from src.domain.eligibility import eligibility_probability
 
 
 class CollectDev(Collect):
@@ -65,38 +66,8 @@ class CollectDev(Collect):
             ),
         })
 
-        # Coefficient de difficulté lié à la zone de livraison
-        zone_penalty = data["delivery_zone"].map({
-            "centre": 0,
-            "suburb": 0.20,
-            "rural": 0.45,
-        })
-
-        weather_penalty = data["weather"].map({
-            "clear": 0,
-            "rain": 0.10,
-            "wind": 0.15,
-            "snow": 0.25,
-        })
-
-        customer_bonus = (data["customer_type"] == "business").astype(int) * 0.15
-
-        # Score latent simulant une décision métier
-        score = (
-            2.5
-            - 0.18 * data["distance_km"]
-            - 0.035 * data["preparation_time_min"]
-            - 0.035 * data["weight_kg"]
-            - zone_penalty
-            - weather_penalty
-            + 1.8 * data["stock_available"]
-            + 1.3 * data["carrier_capacity"] / 50
-            + customer_bonus
-            - 0.40 * data["weekend"]
-            - 0.08 * np.maximum(data["hour"] - 18, 0)
-        )
-
-        probability = 1 / (1 + np.exp(-score))
+        # Cible : règle de calcul du notebook, adaptée au vocabulaire ERP (domaine).
+        probability = eligibility_probability(data)
 
         data["express_eligible"] = rng.binomial(1, probability)
 
