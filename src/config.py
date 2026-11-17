@@ -18,6 +18,11 @@ DUCKLAKE_DATA_PATH = os.getenv("DUCKLAKE_DATA_PATH", "ducklake_data/")
 # Source de l'entraînement : "synthetic" (générateur de dev) ou "ducklake" (commandes réelles).
 TRAINING_SOURCE = os.getenv("TRAINING_SOURCE", "synthetic")
 
+# Source des commandes ERP : base analytique MongoDB, en lecture seule (ADR-0007).
+ERP_MONGO_URI = os.getenv("ERP_MONGO_URI", "mongodb://localhost:27017")
+ERP_MONGO_DATABASE = os.getenv("ERP_MONGO_DATABASE", "livraison_express")
+ERP_MONGO_COLLECTION = os.getenv("ERP_MONGO_COLLECTION", "orders")
+
 # Registre de modèles MLflow : SQLite en dev, PostgreSQL en prod (ADR-0002).
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "sqlite:///mlflow.db")
 # Racine des artefacts : dossier local par défaut, URI s3:// possible plus tard.

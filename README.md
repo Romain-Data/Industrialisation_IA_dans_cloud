@@ -140,6 +140,8 @@ Toute la configuration passe par des variables d'environnement ([`src/config.py`
 | `DUCKLAKE_CATALOG_URL` | `sqlite:///ducklake.sqlite` | Catalogue des snapshots d'entraînement |
 | `DUCKLAKE_DATA_PATH` | `ducklake_data/` | Fichiers Parquet des snapshots |
 | `TRAINING_SOURCE` | `synthetic` | Source de l'entraînement (`synthetic` ou `ducklake`) |
+| `ERP_MONGO_URI` | `mongodb://localhost:27017` | Base analytique MongoDB de l'ERP, lue en lecture seule (ADR-0007) |
+| `ERP_MONGO_DATABASE` / `ERP_MONGO_COLLECTION` | `livraison_express` / `orders` | Base et collection des commandes ERP |
 | `PORT` | `8000` | Port de l'API dans le conteneur |
 
 En PostgreSQL, les URL utilisent le driver psycopg 3 : `postgresql+psycopg://utilisateur@hôte:5432/base`. Le mot de passe peut être fourni par la variable standard `PGPASSWORD` plutôt que dans l'URL (c'est ce que fait `docker-compose.yml`). Au démarrage, le conteneur crée les bases `mlflow` et `ducklake` si elles n'existent pas, puis applique les migrations.
