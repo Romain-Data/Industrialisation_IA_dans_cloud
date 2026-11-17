@@ -1,3 +1,5 @@
+"""Entraînement du modèle (régression logistique scikit-learn) et journalisation dans MLflow."""
+
 import mlflow
 import mlflow.sklearn
 from sklearn.compose import ColumnTransformer
@@ -17,6 +19,7 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from src.config import RANDOM_STATE, REGISTERED_MODEL_NAME
 from src.domain.features import (
     CATEGORICAL_FEATURES,
+    DATA_SCHEMA_VERSION,
     FEATURE_COLUMNS,
     NUMERIC_FEATURES,
     TARGET_COLUMN,
@@ -25,6 +28,11 @@ from src.training.registry import configure_mlflow
 
 
 def train_model(df, params=None):
+    """Entraîne le pipeline, l'évalue sur 20 % des données et l'enregistre dans MLflow.
+
+    Retourne (pipeline, métriques, run_id). `params` complète les paramètres du run
+    (provenance des données, numéro de snapshot DuckLake...).
+    """
     X = df[FEATURE_COLUMNS]
     y = df[TARGET_COLUMN]
 
@@ -113,8 +121,10 @@ def train_model(df, params=None):
         mlflow.log_param("random_state", RANDOM_STATE)
         mlflow.log_param("feature_count", len(FEATURE_COLUMNS))
         mlflow.log_param("training_rows", len(df))
+        # Schéma des données (vocabulaire) : la promotion ne compare que des modèles du même schéma.
+        mlflow.log_param("data_schema", DATA_SCHEMA_VERSION)
         # Provenance des données (ex. numéro de snapshot DuckLake).
-        mlflow.log_params(params or {"data_source": "synthetic"})
+        mlflow.log_params({"data_source": "synthetic", **(params or {})})
 
         for metric_name, metric_value in metrics.items():
             mlflow.log_metric(metric_name, metric_value)

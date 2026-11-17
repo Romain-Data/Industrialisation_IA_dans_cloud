@@ -43,7 +43,7 @@ def test_validate_dataset_rejects_duplicates(orders):
         ("distance_km", -1, "distance"),
         ("weight_kg", -1, "poids"),
         ("preparation_time_min", -1, "préparation"),
-        ("carrier_capacity", 1.5, "capacité"),
+        ("carrier_capacity", -1, "capacité"),
         ("stock_available", 3, "stock_available"),
     ],
 )
@@ -58,7 +58,7 @@ def test_validate_dataset_rejects_out_of_range(orders, column, value, message):
 def test_clean_orders_removes_duplicates_and_invalid_rows(orders):
     dirty = orders.copy()
     dirty.loc[0, "distance_km"] = -5
-    dirty.loc[1, "carrier_capacity"] = 2
+    dirty.loc[1, "carrier_capacity"] = -2
     dirty = pd.concat([dirty, dirty.iloc[[5]]], ignore_index=True)
 
     cleaned = clean_orders_data(dirty)
@@ -80,7 +80,7 @@ def test_validate_order_rejects_missing_feature(orders):
 
 def test_validate_order_rejects_out_of_range(orders):
     broken = orders.copy()
-    broken.loc[0, "carrier_capacity"] = 2
+    broken.loc[0, "carrier_capacity"] = -2
 
     with pytest.raises(ValueError, match="capacité"):
         validate_order(broken)

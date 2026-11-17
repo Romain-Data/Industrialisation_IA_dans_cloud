@@ -1,3 +1,5 @@
+"""Chargement du modèle champion et de sa model card depuis le registre MLflow (ADR-0002)."""
+
 from datetime import UTC, datetime
 
 import mlflow
@@ -21,6 +23,15 @@ LIMITATIONS = [
     "Les performances peuvent varier sur des données réelles.",
     "Le modèle ne remplace pas une analyse des contraintes opérationnelles.",
 ]
+
+
+def champion_version():
+    """Numéro de version du champion dans le registre, ou None s'il n'y en a pas."""
+    mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+    try:
+        return MlflowClient().get_model_version_by_alias(REGISTERED_MODEL_NAME, CHAMPION_ALIAS).version
+    except mlflow.MlflowException:
+        return None
 
 
 def load_model():

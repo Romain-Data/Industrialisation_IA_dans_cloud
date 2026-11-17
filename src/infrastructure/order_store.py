@@ -1,3 +1,5 @@
+"""Stockage SQLAlchemy des commandes et prédictions (SQLite en dev, PostgreSQL en prod)."""
+
 from datetime import UTC, datetime
 
 import pandas as pd
@@ -9,9 +11,12 @@ from sqlalchemy import (
     Integer,
     String,
     create_engine,
+    func,
     select,
     text,
 )
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
@@ -21,7 +26,7 @@ from src.infrastructure.migrations import current_revision, head_revision
 
 
 class Base(DeclarativeBase):
-    pass
+    """Base déclarative commune aux tables SQLAlchemy (utilisée par Alembic)."""
 
 
 class OrderRecord(Base):
@@ -57,6 +62,23 @@ class OrderRecord(Base):
     outcome_recorded_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+
+class ImportRecord(Base):
+    """Journal des imports ETL : position de lecture et compteurs de chaque passage."""
+
+    __tablename__ = "erp_imports"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    source: Mapped[str] = mapped_column(String)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    last_order_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    read: Mapped[int] = mapped_column(Integer)
+    imported: Mapped[int] = mapped_column(Integer)
+    already_present: Mapped[int] = mapped_column(Integer)
+    rejected: Mapped[int] = mapped_column(Integer)
+    unlabeled: Mapped[int] = mapped_column(Integer)
 
 
 class PredictionRecord(Base):
@@ -141,6 +163,32 @@ class SqlAlchemyOrderStore(OrderStore):
         # Dates en UTC sans fuseau : même représentation pour SQLite et PostgreSQL.
         orders["order_date"] = pd.to_datetime(orders["order_date"], utc=True).dt.tz_localize(None)
         return orders
+
+    def count_labeled_orders(self):
+        query = select(func.count()).where(OrderRecord.express_eligible.is_not(None))
+        with self._engine.connect() as connection:
+            return connection.execute(query).scalar()
+
+    def import_orders(self, orders):
+        if not orders:
+            return 0
+
+        now = datetime.now(UTC)
+        rows = [
+            {**order, "outcome_recorded_at": now if order.get("express_eligible") is not None else None}
+            for order in orders
+        ]
+        # INSERT ... ON CONFLICT DO NOTHING : rejouer un import ne crée aucun doublon.
+        insert = postgresql_insert if self._engine.dialect.name == "postgresql" else sqlite_insert
+        statement = insert(OrderRecord).values(rows).on_conflict_do_nothing(index_elements=["order_id"])
+
+        with self._engine.begin() as connection:
+            return connection.execute(statement).rowcount
+
+    def last_order_id(self, prefix):
+        query = select(func.max(OrderRecord.order_id)).where(OrderRecord.order_id.like(f"{prefix}%"))
+        with self._engine.connect() as connection:
+            return connection.execute(query).scalar()
 
     def ping(self):
         try:

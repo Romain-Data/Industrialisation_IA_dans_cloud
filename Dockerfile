@@ -1,10 +1,13 @@
-# Image unique : API, worker et entraînement (ADR-0003).
+# Une base commune, deux images (ADR-0003, ADR-0009) :
+#   - api (cible par défaut) : API, worker, entraînement, ETL. Sans Prefect.
+#   - orchestrator           : la même, plus Prefect, pour exécuter les flows planifiés.
 # Construire pour le VPS depuis le Mac M1 :
 #   docker build --platform linux/amd64 -t express-delivery .
+#   docker build --platform linux/amd64 --target orchestrator -t express-delivery-orchestrator .
 
 ARG PYTHON_VERSION=3.12
 
-# --- Étape 1 : installation des dépendances avec uv ---------------------------
+# --- Dépendances (uv) ------------------------------------------------------------
 FROM python:${PYTHON_VERSION}-slim AS builder
 
 COPY --from=ghcr.io/astral-sh/uv:0.10 /uv /usr/local/bin/uv
@@ -16,20 +19,29 @@ ENV UV_COMPILE_BYTECODE=1 \
 WORKDIR /app
 
 # Dépendances seules d'abord : cette couche reste en cache tant que le lock ne change pas.
+# Aucun groupe (ni dev, ni orchestration) : l'image de l'API reste minimale.
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    uv sync --frozen --no-dev --no-install-project
+    uv sync --frozen --no-default-groups --no-install-project
 
-# --- Étape 2 : image d'exécution, sans uv ni cache ----------------------------
-FROM python:${PYTHON_VERSION}-slim
+# Même environnement, plus le groupe `orchestration` (Prefect).
+FROM builder AS builder-orchestrator
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    uv sync --frozen --no-default-groups --group orchestration --no-install-project
+
+# --- Base d'exécution commune, sans uv ni cache ------------------------------------
+FROM python:${PYTHON_VERSION}-slim AS runtime
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/app/.venv/bin:$PATH" \
     PORT=8000 \
     GIT_PYTHON_REFRESH=quiet \
-    MLFLOW_DISABLE_AGENT_HINT=1
+    MLFLOW_DISABLE_AGENT_HINT=1 \
+    DUCKLAKE_DATA_PATH=/app/ducklake/
 
 # Correctifs de sécurité Debian (scan Trivy en CI) + curl, utilisé par le health check de Coolify.
 RUN apt-get update \
@@ -41,7 +53,6 @@ RUN groupadd --system app && useradd --system --gid app --home-dir /app app
 
 WORKDIR /app
 
-COPY --from=builder --chown=app:app /app/.venv /app/.venv
 COPY --chown=app:app alembic.ini ./
 COPY --chown=app:app migrations ./migrations
 COPY --chown=app:app src ./src
@@ -55,11 +66,28 @@ RUN chmod +x docker-entrypoint.sh \
 
 USER app
 
+ENTRYPOINT ["./docker-entrypoint.sh"]
+
+# --- Image de l'orchestrateur (Prefect serve) ----------------------------------------
+FROM runtime AS orchestrator
+
+COPY --from=builder-orchestrator --chown=app:app /app/.venv /app/.venv
+
+# Extensions DuckDB installées au build : aucun téléchargement au démarrage en prod.
+RUN python -c "import duckdb; c = duckdb.connect(); [c.install_extension(e) for e in ('ducklake', 'postgres')]"
+
+# Processus d'exécution des flows : pas d'API HTTP, donc pas de health check HTTP.
+HEALTHCHECK NONE
+CMD ["orchestrator"]
+
+# --- Image de l'API (cible par défaut : la dernière) ---------------------------------
+FROM runtime AS api
+
+COPY --from=builder --chown=app:app /app/.venv /app/.venv
+
 # Extensions DuckDB installées au build : aucun téléchargement au démarrage en prod.
 # Catalogue DuckLake PostgreSQL en prod : l'extension sqlite (dev) n'est pas embarquée.
 RUN python -c "import duckdb; c = duckdb.connect(); [c.install_extension(e) for e in ('ducklake', 'postgres')]"
-
-ENV DUCKLAKE_DATA_PATH=/app/ducklake/
 
 EXPOSE 8000
 
@@ -67,5 +95,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
     CMD python -c "import os, urllib.request; urllib.request.urlopen(f'http://127.0.0.1:{os.environ[\"PORT\"]}/health/ready', timeout=4)"
 
-ENTRYPOINT ["./docker-entrypoint.sh"]
 CMD ["api"]

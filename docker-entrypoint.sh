@@ -2,6 +2,8 @@
 # Point d'entrée de l'image (ADR-0003, ADR-0004).
 #   api      : applique les migrations puis lance l'API (défaut)
 #   train    : lance une tâche d'entraînement ponctuelle
+#   etl      : importe les nouvelles commandes de l'ERP (MongoDB) dans notre base
+#   orchestrator : exécute les flows Prefect planifiés (image cible `orchestrator`)
 #   migrate  : applique seulement les migrations
 #   autre    : exécute la commande telle quelle (ex. sh)
 set -e
@@ -15,6 +17,16 @@ case "$1" in
   train)
     python -m src.infrastructure.bootstrap
     exec python -m src.training.pipeline
+    ;;
+  etl)
+    python -m src.infrastructure.bootstrap
+    alembic upgrade head
+    exec python -m src.etl.erp_import
+    ;;
+  orchestrator)
+    python -m src.infrastructure.bootstrap
+    alembic upgrade head
+    exec python -m src.orchestration.serve
     ;;
   migrate)
     python -m src.infrastructure.bootstrap

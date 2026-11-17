@@ -1,4 +1,4 @@
-# ADR-0001 : Stockage des commandes clients
+# ADR-0001 : Stockage des commandes
 
 - Status: Accepted
 - Date: 2026-10-06

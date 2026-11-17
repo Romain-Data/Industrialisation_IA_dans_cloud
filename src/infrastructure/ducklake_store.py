@@ -45,6 +45,7 @@ def _quote(value):
 
 
 class DuckLakeSnapshotStore(TrainingSnapshotStore):
+    """Snapshots d'entraînement DuckLake : une écriture = une version relisible (time travel)."""
     def __init__(self, catalog_url, data_path):
         self._extension, self._catalog = ducklake_catalog(catalog_url)
         self._data_path = str(data_path).rstrip("/") + "/"
@@ -116,4 +117,3 @@ class DuckLakeSnapshotStore(TrainingSnapshotStore):
     @staticmethod
     def _latest_version(connection):
         return connection.execute("SELECT max(snapshot_id) FROM lake.snapshots()").fetchone()[0]
-

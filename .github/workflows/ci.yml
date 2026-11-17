@@ -1,15 +1,17 @@
-# CI/CD (ADR-0004, GitFlow)
-#   - push / pull request      : ruff + pylint + pytest
-#   - push sur develop         : + image (test de démarrage, scan Trivy) sur GHCR + déploiement preprod
-#   - GitHub Release publiée   : + image vX.Y.Z (mêmes contrôles) sur GHCR + déploiement prod
-#   - push sur main            : contrôles uniquement (la prod ne part que d'une release)
+# CI/CD (ADR-0004) : construire une fois, vérifier en préprod, promouvoir en prod.
 #
-# Configuration GitHub attendue (Settings > Environments) :
-#   environnements `preprod` et `prod`, chacun avec :
-#     - variable COOLIFY_APP_UUID : UUID de l'application Coolify
-#   secrets du dépôt :
-#     - COOLIFY_URL   : ex. https://coolify.example.com (sans / final)
-#     - COOLIFY_TOKEN : token API Coolify limité au projet (droits write + deploy)
+#   branche ─push─▶ checks : ruff, pylint, pytest (+ MongoDB), version libre (PR vers main)
+#      │ PR vers develop (checks obligatoires)
+#   develop ─▶ build : images api + orchestrator (sha-xxxxxxx), test de démarrage, Trivy, GHCR
+#           ─▶ deploy-preprod : Coolify (attente du résultat) + tests de fumée complets
+#           ─▶ statut « Préprod vérifiée » sur le commit
+#      │ PR develop → main (« Préprod vérifiée » obligatoire, fusion par Romain)
+#   main ───▶ promote : mêmes images retaguées X.Y.Z (aucune reconstruction), tag + release
+#           ─▶ deploy-prod : Coolify (attente du résultat) + check de santé en lecture seule
+#
+# Configuration GitHub (Settings > Environments) :
+#   environnements `preprod` et `prod`, chacun avec les variables COOLIFY_APP_UUID et APP_URL
+#   secrets du dépôt : COOLIFY_URL, COOLIFY_TOKEN (jeton limité au projet, droits write + deploy)
 
 name: CI
 
@@ -17,8 +19,6 @@ on:
   push:
     branches: ["**"]
   pull_request:
-  release:
-    types: [published]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -29,13 +29,29 @@ permissions:
 
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository }}
+  PREPROD_STATUS: Préprod vérifiée
 
 jobs:
   checks:
     name: Lint & tests
     runs-on: ubuntu-latest
+    # MongoDB réel pour tester la lecture des commandes ERP (ADR-0007), même version que l'ERP.
+    services:
+      mongodb:
+        image: mongo:8
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok'"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      MONGO_TEST_URI: mongodb://localhost:27017
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # tags nécessaires au contrôle de version
 
       - uses: astral-sh/setup-uv@v10.3.3
         with:
@@ -53,10 +69,21 @@ jobs:
       - name: Tests (pytest)
         run: uv run pytest -q
 
+      # Une PR vers main publiera la version de pyproject.toml : elle ne doit pas déjà exister.
+      - name: Version à publier encore libre
+        if: github.event_name == 'pull_request' && github.base_ref == 'main'
+        run: |
+          version=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          if git rev-parse -q --verify "refs/tags/v$version" >/dev/null; then
+            echo "::error::v$version existe déjà : incrémenter la version dans pyproject.toml sur develop."
+            exit 1
+          fi
+          echo "Version publiée par cette fusion : v$version"
+
   build:
-    name: Image Docker
+    name: Images Docker
     needs: checks
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/develop') || github.event_name == 'release'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -72,30 +99,33 @@ jobs:
 
       - uses: docker/setup-buildx-action@v4
 
-      # Deux tags (ADR-0004) : le SHA du commit, et la version pour une release vX.Y.Z.
-      - id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ env.IMAGE_NAME }}
-          tags: |
-            type=raw,value=${{ steps.vars.outputs.sha_tag }}
-            type=semver,pattern={{version}},enable=${{ github.event_name == 'release' }}
-
       # 1. Construire localement pour tester avant de publier.
-      - name: Construire l'image (sans publier)
+      - name: Construire l'image de l'API
         uses: docker/build-push-action@v7
         with:
           context: .
+          target: api
           platforms: linux/amd64
           load: true
-          tags: local/express-delivery:ci
+          tags: local/api:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # 2. L'image démarre : migrations appliquées, base joignable (SQLite par défaut, sans modèle).
-      - name: Tester le démarrage de l'image
+      - name: Construire l'image de l'orchestrateur
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: orchestrator
+          platforms: linux/amd64
+          load: true
+          tags: local/orchestrator:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # 2. L'API démarre : migrations appliquées, base joignable (SQLite par défaut, sans modèle).
+      - name: Tester le démarrage de l'API
         run: |
-          docker run -d --name smoke -p 8000:8000 local/express-delivery:ci
+          docker run -d --name smoke -p 8000:8000 local/api:ci
           for _ in $(seq 1 30); do
             curl -sf http://localhost:8000/health >/dev/null && break
             sleep 2
@@ -106,79 +136,151 @@ jobs:
           echo "$ready" | grep -q '"schema":"up_to_date"'
           docker rm -f smoke
 
-      # 3. Sécurité : rapport complet, puis échec sur toute vulnérabilité critique corrigeable.
-      - name: Scanner l'image (Trivy, rapport)
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          image-ref: local/express-delivery:ci
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: "0"
+      - name: Tester l'image de l'orchestrateur
+        run: docker run --rm --entrypoint python local/orchestrator:ci -c "import prefect, src.orchestration.flows; print('prefect', prefect.__version__)"
 
-      - name: Scanner l'image (Trivy, blocage sur CRITICAL)
+      # 3. Sécurité : échec sur toute vulnérabilité critique corrigeable, dans les deux images.
+      - name: Scanner l'image de l'API (Trivy)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: local/express-delivery:ci
+          image-ref: local/api:ci
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Scanner l'image de l'orchestrateur (Trivy)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: local/orchestrator:ci
           severity: CRITICAL
           ignore-unfixed: true
           exit-code: "1"
           skip-setup-trivy: true
 
-      # 4. Publier l'image testée (reconstruction instantanée depuis le cache).
+      # 4. Publier les images testées (sha-xxxxxxx) : ce sont elles qui iront en prod.
       - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Publier l'image
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          platforms: linux/amd64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
+      - name: Publier les images
+        run: |
+          image="${IMAGE_NAME,,}"
+          tag="${{ steps.vars.outputs.sha_tag }}"
+          docker tag local/api:ci "$image:$tag"
+          docker tag local/orchestrator:ci "$image-orchestrator:$tag"
+          docker push "$image:$tag"
+          docker push "$image-orchestrator:$tag"
 
-  deploy:
-    name: Déploiement ${{ github.event_name == 'release' && 'prod' || 'preprod' }}
+  deploy-preprod:
+    name: Déploiement préprod
     needs: build
     runs-on: ubuntu-latest
-    environment: ${{ github.event_name == 'release' && 'prod' || 'preprod' }}
+    environment: preprod
+    concurrency:
+      group: deploy-preprod
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      statuses: write
     env:
       COOLIFY_URL: ${{ secrets.COOLIFY_URL }}
       COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
-      APP_UUID: ${{ vars.COOLIFY_APP_UUID }}
-      IMAGE_TAG: ${{ needs.build.outputs.sha_tag }}
     steps:
-      # Tant que l'application Coolify de l'environnement n'existe pas, on ne déploie pas
-      # (l'image est quand même publiée sur GHCR).
-      - name: Vérifier la configuration Coolify
-        id: config
-        run: |
-          if [ -z "$APP_UUID" ]; then
-            echo "::warning::COOLIFY_APP_UUID non défini pour l'environnement ${{ github.event_name == 'release' && 'prod' || 'preprod' }} : déploiement ignoré."
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-          fi
+      - uses: actions/checkout@v7
 
-      # Coolify tire l'image publiée sans la reconstruire : on lui indique le tag
-      # exact (SHA) avant de déclencher le déploiement. L'auto-deploy Coolify reste désactivé.
-      - name: Pointer l'application Coolify sur l'image ${{ needs.build.outputs.sha_tag }}
-        if: steps.config.outputs.ready == 'true'
-        run: |
-          curl --fail-with-body -sS -X PATCH \
-            -H "Authorization: Bearer $COOLIFY_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "{\"docker_registry_image_name\": \"${IMAGE_NAME,,}\", \"docker_registry_image_tag\": \"$IMAGE_TAG\"}" \
-            "$COOLIFY_URL/api/v1/applications/$APP_UUID"
+      - name: Déployer sur Coolify et attendre le résultat
+        run: python3 scripts/coolify_deploy.py "${{ vars.COOLIFY_APP_UUID }}" "$IMAGE_NAME" "${{ needs.build.outputs.sha_tag }}"
 
-      # Coolify vérifie /health/ready et garde l'ancienne version si le démarrage échoue.
-      - name: Déclencher le déploiement
-        if: steps.config.outputs.ready == 'true'
+      - name: Tests de fumée sur la préprod (parcours complet)
+        run: python3 scripts/smoke_test.py "${{ vars.APP_URL }}" --mode full
+
+      # Statut lu par la règle de protection de main : la PR develop → main en dépend.
+      - name: Statut « Préprod vérifiée »
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RESULT: ${{ job.status }}
         run: |
-          curl --fail-with-body -sS -X POST \
-            -H "Authorization: Bearer $COOLIFY_TOKEN" \
-            "$COOLIFY_URL/api/v1/deploy?uuid=$APP_UUID"
+          state=$([ "$RESULT" = "success" ] && echo success || echo failure)
+          gh api "repos/${{ github.repository }}/statuses/${{ github.sha }}" \
+            -f state="$state" -f context="$PREPROD_STATUS" \
+            -f description="Déploiement et tests de fumée en préprod : $state" \
+            -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+  promote:
+    name: Promotion vers la prod
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: checks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+      statuses: read
+      pull-requests: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # Le commit testé en préprod est la tête de develop fusionnée dans main.
+      - name: Retrouver le commit vérifié en préprod
+        id: tested
+        run: |
+          sha=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" -q '.[0].head.sha')
+          [ -n "$sha" ] || { echo "::error::Aucune PR associée à ce commit de main."; exit 1; }
+          state=$(gh api "repos/${{ github.repository }}/commits/$sha/statuses" \
+            -q "[.[] | select(.context == \"$PREPROD_STATUS\")][0].state")
+          [ "$state" = "success" ] || { echo "::error::$sha n'a pas le statut « $PREPROD_STATUS » (état : $state)."; exit 1; }
+          echo "sha_tag=sha-${sha::7}" >> "$GITHUB_OUTPUT"
+          echo "Commit vérifié en préprod : $sha"
+
+      - name: Version
+        id: version
+        run: echo "version=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Même empreinte que l'image testée en préprod : aucun rebuild.
+      - name: Promouvoir les images (nouveau tag, même contenu)
+        run: |
+          image="${IMAGE_NAME,,}"
+          for name in "$image" "$image-orchestrator"; do
+            docker buildx imagetools create \
+              -t "$name:${{ steps.version.outputs.version }}" -t "$name:prod" \
+              "$name:${{ steps.tested.outputs.sha_tag }}"
+          done
+
+      - name: Tag et GitHub Release
+        run: |
+          gh release create "v${{ steps.version.outputs.version }}" --target "${{ github.sha }}" \
+            --title "v${{ steps.version.outputs.version }}" --generate-notes
+
+  deploy-prod:
+    name: Déploiement prod
+    needs: promote
+    runs-on: ubuntu-latest
+    environment: prod
+    concurrency:
+      group: deploy-prod
+      cancel-in-progress: false
+    env:
+      COOLIFY_URL: ${{ secrets.COOLIFY_URL }}
+      COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Déployer sur Coolify et attendre le résultat
+        run: python3 scripts/coolify_deploy.py "${{ vars.COOLIFY_APP_UUID }}" "$IMAGE_NAME" "${{ needs.promote.outputs.version }}"
+
+      - name: Check de santé en prod (lecture seule)
+        run: python3 scripts/smoke_test.py "${{ vars.APP_URL }}" --mode readonly

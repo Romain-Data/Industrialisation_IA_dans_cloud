@@ -16,10 +16,10 @@ VALID_ORDER = {
     "weight_kg": 2.4,
     "stock_available": 1,
     "preparation_time_min": 18,
-    "carrier_capacity": 0.85,
-    "weather": "normal",
+    "carrier_capacity": 34.5,
+    "weather": "clear",
     "delivery_zone": "centre",
-    "customer_type": "premium",
+    "customer_type": "business",
 }
 
 
@@ -35,6 +35,10 @@ class FakeModel:
 
 def _no_model():
     raise FileNotFoundError
+
+
+# Pas de surveillance du registre MLflow dans les tests d'API (voir test_model_reloader.py).
+NO_RELOAD = {"version_reader": lambda: None, "reload_interval": 0}
 
 
 FAKE_MODEL_CARD = {
@@ -55,6 +59,7 @@ def isolated_mlflow(tmp_path, monkeypatch):
     uri = f"sqlite:///{tmp_path / 'mlflow.db'}"
     monkeypatch.setattr("src.training.registry.MLFLOW_TRACKING_URI", uri)
     monkeypatch.setattr("src.serving.model_loader.MLFLOW_TRACKING_URI", uri)
+    monkeypatch.setattr("src.training.retraining.MLFLOW_TRACKING_URI", uri)
     monkeypatch.setattr(
         "src.training.registry.MLFLOW_ARTIFACT_ROOT", (tmp_path / "mlartifacts").as_uri()
     )
@@ -81,7 +86,10 @@ def database_url(tmp_path):
 @pytest.fixture
 def client(database_url):
     app = create_app(
-        database_url, model_loader=FakeModel, model_card_loader=lambda: dict(FAKE_MODEL_CARD)
+        database_url,
+        model_loader=FakeModel,
+        model_card_loader=lambda: dict(FAKE_MODEL_CARD),
+        **NO_RELOAD,
     )
     with TestClient(app) as test_client:
         yield test_client
@@ -89,7 +97,7 @@ def client(database_url):
 
 @pytest.fixture
 def client_without_model(database_url):
-    app = create_app(database_url, model_loader=_no_model)
+    app = create_app(database_url, model_loader=_no_model, **NO_RELOAD)
     with TestClient(app) as test_client:
         yield test_client
 

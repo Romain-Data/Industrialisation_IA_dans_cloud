@@ -1,3 +1,5 @@
+"""Calcul d'une prédiction au format du contrat Prediction (avec la latence)."""
+
 import time
 from datetime import datetime
 

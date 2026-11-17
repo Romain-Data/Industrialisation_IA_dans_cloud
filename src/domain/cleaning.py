@@ -1,4 +1,8 @@
+"""Nettoyage des données d'entraînement : doublons, dates, valeurs manquantes ou hors bornes."""
+
 import pandas as pd
+
+from src.domain.features import CATEGORY_VALUES
 
 
 def clean_orders_data(df):
@@ -37,8 +41,12 @@ def clean_orders_data(df):
     cleaned = cleaned[cleaned["distance_km"] >= 0]
     cleaned = cleaned[cleaned["weight_kg"] >= 0]
     cleaned = cleaned[cleaned["preparation_time_min"] >= 0]
-    cleaned = cleaned[cleaned["carrier_capacity"].between(0, 1)]
+    cleaned = cleaned[cleaned["carrier_capacity"] >= 0]
     cleaned = cleaned[cleaned["stock_available"].isin([0, 1])]
 
-    return cleaned.reset_index(drop=True)
+    # Catégories inconnues (ex. ancien vocabulaire, ADR-0007) : lignes écartées.
+    # Une catégorie manquante est gardée : elle est imputée par le modèle.
+    for column, allowed in CATEGORY_VALUES.items():
+        cleaned = cleaned[cleaned[column].isna() | cleaned[column].isin(allowed)]
 
+    return cleaned.reset_index(drop=True)

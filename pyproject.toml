@@ -1,6 +1,6 @@
 [project]
 name = "industrialisation-ia-dans-cloud"
-version = "0.1.0"
+version = "0.2.0"
 description = "API de prédiction d'éligibilité à la livraison express (industrialisation d'un POC ML)"
 readme = "README.md"
 license = "MIT"
@@ -12,6 +12,7 @@ dependencies = [
     "mlflow-skinny==3.16.1",
     "pandas>=3.0.6",
     "psycopg[binary]>=3.3.9",
+    "pymongo>=4.20.0",
     "scikit-learn>=1.9.1",
     "skops>=0.16.0",
     "sqlalchemy>=2.1.3",
@@ -29,10 +30,19 @@ dev = [
     "ruff>=0.17.5",
     "seaborn>=0.13.2",
 ]
+orchestration = [
+    "prefect==3.9.3",
+]
+
+[tool.uv]
+# En local et en CI : outils de dev et orchestration. Les images Docker choisissent
+# explicitement leurs groupes (aucun pour l'API, `orchestration` pour l'orchestrateur).
+default-groups = ["dev", "orchestration"]
 
 [tool.ruff]
 # Notebooks exploratoires : hors du lint de la CI.
-extend-exclude = ["*.ipynb"]
+# Simulateur ERP : code fourni par le cours, système externe à l'application.
+extend-exclude = ["*.ipynb", "erp_simulator"]
 
 [tool.ruff.lint.flake8-bugbear]
 # Injection de dépendances FastAPI : Depends() en valeur par défaut est voulu.
@@ -40,7 +50,7 @@ extend-immutable-calls = ["fastapi.Depends"]
 
 [tool.pylint.main]
 # Garde-fou contre la régression de qualité (CI) ; à remonter progressivement.
-fail-under = 8.5
+fail-under = 9.5
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

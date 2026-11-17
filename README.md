@@ -70,13 +70,13 @@ curl -X POST https://express-delivery-preprod.romaincollery.com/v1/predictions \
   -H "Content-Type: application/json" \
   -d '{"hour": 14, "day_of_week": 2, "weekend": 0, "distance_km": 3.5,
        "order_value_eur": 89.9, "weight_kg": 2.4, "stock_available": 1,
-       "preparation_time_min": 18, "carrier_capacity": 0.85,
-       "weather": "normal", "delivery_zone": "centre", "customer_type": "premium"}'
+       "preparation_time_min": 18, "carrier_capacity": 34.5,
+       "weather": "clear", "delivery_zone": "centre", "customer_type": "business"}'
 ```
 
 ```json
 {"order_id": "CMD-1a2b3c4d", "express_eligible": true, "decision": "oui",
- "probability": 0.9377, "model_version": "1.0.0", "predicted_at": "...", "latency_ms": 24.2}
+ "probability": 0.9377, "model_version": "2.0.0", "predicted_at": "...", "latency_ms": 24.2}
 ```
 
 ## Démarrage rapide
@@ -128,6 +128,29 @@ TRAINING_SOURCE=ducklake uv run python -m src.training.pipeline
 
 Chaque run MLflow enregistre ses métriques, la liste des variables et la provenance des données (numéro de snapshot DuckLake). L'API charge le champion **au démarrage** : il faut la redémarrer après un entraînement qui le change. Pour revenir à un modèle précédent, il suffit de replacer l'alias `champion` sur une version antérieure dans MLflow, puis de redémarrer l'API.
 
+## Import des commandes de l'ERP
+
+L'ERP de l'entreprise est simulé par [`erp_simulator/`](erp_simulator/) (PostgreSQL de production et MongoDB analytique). Nous lisons **MongoDB en lecture seule** ([ADR-0007](IndusIAdansCloud/ADR/ADR-0007%20-%20PostgreSQL%2C%20MongoDB%20ou%20autre.md)) par un ETL incrémental et idempotent :
+
+```bash
+docker compose -f erp_simulator/docker-compose.erp.yml up -d --build   # ERP simulé
+ERP_MONGO_URI=mongodb://localhost:27017 uv run python -m src.etl.erp_import
+TRAINING_SOURCE=ducklake uv run python -m src.training.pipeline         # entraînement sur ces données
+```
+
+Chaque commande est nettoyée puis validée ; les commandes invalides sont rejetées et comptées. Chaque import est consigné dans la table `erp_imports` (position de reprise et compteurs).
+
+## Orchestration (Prefect)
+
+Le flow `erp-pipeline` ([ADR-0009](IndusIAdansCloud/ADR/ADR-0009%20-%20Orchestration%20du%20r%C3%A9entra%C3%AEnement.md)) tourne toutes les heures : import ERP, puis réentraînement si au moins `RETRAIN_MIN_NEW_ORDERS` nouvelles commandes étiquetées sont arrivées. L'API recharge d'elle-même un nouveau champion (vérification chaque minute), sans redémarrage.
+
+```bash
+uv run prefect server start                                   # interface sur http://127.0.0.1:4200
+PREFECT_API_URL=http://127.0.0.1:4200/api uv run python -m src.orchestration.serve
+```
+
+En Docker, l'orchestrateur est une image à part (`--target orchestrator`) : l'image de l'API ne contient pas Prefect.
+
 ## Configuration
 
 Toute la configuration passe par des variables d'environnement ([`src/config.py`](src/config.py)).
@@ -140,6 +163,13 @@ Toute la configuration passe par des variables d'environnement ([`src/config.py`
 | `DUCKLAKE_CATALOG_URL` | `sqlite:///ducklake.sqlite` | Catalogue des snapshots d'entraînement |
 | `DUCKLAKE_DATA_PATH` | `ducklake_data/` | Fichiers Parquet des snapshots |
 | `TRAINING_SOURCE` | `synthetic` | Source de l'entraînement (`synthetic` ou `ducklake`) |
+| `ERP_MONGO_URI` | `mongodb://localhost:27017` | Base analytique MongoDB de l'ERP, lue en lecture seule (ADR-0007) |
+| `ERP_MONGO_DATABASE` / `ERP_MONGO_COLLECTION` | `livraison_express` / `orders` | Base et collection des commandes ERP |
+| `ERP_IMPORT_BATCH_SIZE` | `1000` | Taille des lots lus par l'ETL ERP |
+| `ERP_PIPELINE_CRON` | `0 * * * *` | Planification du flow Prefect `erp-pipeline` |
+| `RETRAIN_MIN_NEW_ORDERS` | `500` | Nouvelles commandes étiquetées nécessaires pour réentraîner |
+| `MODEL_RELOAD_INTERVAL_SECONDS` | `60` | Vérification du champion par l'API (0 : désactivée) |
+| `PREFECT_API_URL` | — | Serveur Prefect utilisé par l'orchestrateur |
 | `PORT` | `8000` | Port de l'API dans le conteneur |
 
 En PostgreSQL, les URL utilisent le driver psycopg 3 : `postgresql+psycopg://utilisateur@hôte:5432/base`. Le mot de passe peut être fourni par la variable standard `PGPASSWORD` plutôt que dans l'URL (c'est ce que fait `docker-compose.yml`). Au démarrage, le conteneur crée les bases `mlflow` et `ducklake` si elles n'existent pas, puis applique les migrations.
@@ -156,11 +186,14 @@ uv run pylint src       # qualité (score minimal dans pyproject.toml)
 
 Le dépôt suit **GitFlow** (détails dans [CONTRIBUTING.md](CONTRIBUTING.md)). La CI GitHub Actions ([`ci.yml`](.github/workflows/ci.yml)) :
 
-1. à chaque push et pull request : `ruff`, `pylint`, `pytest` ;
-2. sur `develop` et sur une GitHub Release : construit l'image `linux/amd64`, vérifie qu'elle démarre, la scanne avec Trivy, la publie sur `ghcr.io/romain-data/industrialisation_ia_dans_cloud` (tags `sha-xxxxxxx` et `X.Y.Z`) ;
-3. déploie avec Coolify : `develop` → preprod, release → prod. Coolify ne met la nouvelle version en service que si `/health/ready` répond.
+1. à chaque push et pull request : `ruff`, `pylint`, `pytest` (avec un MongoDB de test) ;
+2. sur `develop` : construit **une fois** les images `linux/amd64` de l'API et de l'orchestrateur, vérifie qu'elles démarrent, les scanne avec Trivy et les publie sur GHCR (tag `sha-xxxxxxx`) ;
+3. déploie en **préprod** avec Coolify, attend le résultat, lance des tests de fumée sur l'URL de préprod ([`scripts/smoke_test.py`](scripts/smoke_test.py)) et pose le statut **« Préprod vérifiée »** sur le commit ;
+4. la PR `develop` → `main` exige ce statut ; sa fusion **promeut** les mêmes images (tag `X.Y.Z`, sans reconstruction), crée la GitHub Release, déploie en **prod** et vérifie sa santé.
 
-L'image Docker ([`Dockerfile`](Dockerfile)) est construite en deux étapes avec uv, tourne avec un utilisateur non root et sert à la fois l'API (`api`, par défaut), l'entraînement (`train`) et les migrations (`migrate`).
+Coolify ne met une nouvelle version en service que si `/health/ready` répond ; sinon l'ancienne reste en place et la CI échoue.
+
+L'image Docker ([`Dockerfile`](Dockerfile)) est construite en deux étapes avec uv, tourne avec un utilisateur non root et sert à la fois l'API (`api`, par défaut), l'entraînement (`train`), l'import de l'ERP (`etl`) et les migrations (`migrate`) ; la cible `orchestrator` ajoute Prefect pour exécuter les flows.
 
 ## Structure du dépôt
 
@@ -179,12 +212,19 @@ openapi.yml        contrat de l'API
 
 ## Décisions d'architecture
 
-Les choix structurants sont documentés sous forme d'ADR dans [`IndusIAdansCloud/ADR/`](IndusIAdansCloud/ADR/) :
+Les choix structurants sont documentés sous forme d'ADR dans [`IndusIAdansCloud/ADR/`](IndusIAdansCloud/ADR/). Nos numéros suivent l'ordre de rédaction ; la table indique quel ADR traite chaque sujet du barème du cours.
 
-- [ADR-0001](IndusIAdansCloud/ADR/ADR-0001%20-%20Stockage%20commande%20clients.md) : stockage des commandes (SQLAlchemy, PostgreSQL, DuckLake)
-- [ADR-0002](IndusIAdansCloud/ADR/ADR-0002%20-%20Stockage%20des%20artefacts%20de%20modele.md) : stockage des modèles (MLflow, alias `champion`)
-- [ADR-0003](IndusIAdansCloud/ADR/ADR-0003%20-%20Choix%20de%20la%20plateforme%20de%20d%C3%A9ploiement.md) : plateforme de déploiement (Coolify, Docker)
-- [ADR-0004](IndusIAdansCloud/ADR/ADR-0004%20-%20Strat%C3%A9gie%20de%20d%C3%A9ploiement.md) : stratégie de déploiement (CI, GitFlow, preprod / prod)
+| Sujet du barème | ADR du projet | Contenu |
+|---|---|---|
+| ADR-0001 : Stockage des commandes | [ADR-0001](IndusIAdansCloud/ADR/ADR-0001%20-%20Stockage%20des%20commandes.md) | SQLAlchemy, SQLite / PostgreSQL, Alembic, snapshots DuckLake |
+| ADR-0002 : Stockage des artefacts de modèle | [ADR-0002](IndusIAdansCloud/ADR/ADR-0002%20-%20Stockage%20des%20artefacts%20de%20modele.md) | MLflow, registre, alias `champion`, schéma de données |
+| ADR-0003 : Quelle plateforme de déploiement ? | [ADR-0003](IndusIAdansCloud/ADR/ADR-0003%20-%20Choix%20de%20la%20plateforme%20de%20d%C3%A9ploiement.md) | Coolify sur VPS, image Docker unique |
+| ADR-0004 : Cloud, on-premise ou local ? | — | *À rédiger (ADR-0008)* |
+| ADR-0005 : Quelle stratégie de déploiement ? | [ADR-0004](IndusIAdansCloud/ADR/ADR-0004%20-%20Strat%C3%A9gie%20de%20d%C3%A9ploiement.md) | CI GitHub Actions, GitFlow, preprod / prod |
+| ADR-0006 : PostgreSQL, MongoDB, autre ? | [ADR-0007](IndusIAdansCloud/ADR/ADR-0007%20-%20PostgreSQL%2C%20MongoDB%20ou%20autre.md) | MongoDB analytique en lecture seule, ETL |
+| ADR-0007 : Sécuriser les entrées, sorties et l'accès à la donnée | [ADR-0005](IndusIAdansCloud/ADR/ADR-0005%20-%20S%C3%A9curisation%20des%20entr%C3%A9es%2C%20sorties%20et%20acc%C3%A8s%20%C3%A0%20la%20donn%C3%A9e.md) | secrets, image, CI, dépôt, limites connues |
+| *(hors barème)* | [ADR-0009](IndusIAdansCloud/ADR/ADR-0009%20-%20Orchestration%20du%20r%C3%A9entra%C3%AEnement.md) | orchestration Prefect : import ERP horaire, réentraînement, rechargement du modèle |
+| *(hors barème)* | [ADR-0006](IndusIAdansCloud/ADR/ADR-0006%20-%20File%20d'attente.md) | file d'attente des commandes (en mémoire, worker) |
 
 ## Contribuer
 

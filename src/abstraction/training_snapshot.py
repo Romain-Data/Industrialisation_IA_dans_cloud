@@ -1,3 +1,5 @@
+"""Contrat des jeux d'entraînement historisés (snapshots), pour des entraînements reproductibles."""
+
 from abc import ABC, abstractmethod
 
 import pandas as pd
@@ -8,7 +10,7 @@ class TrainingSnapshotStore(ABC):
 
     @abstractmethod
     def write(self, orders: pd.DataFrame) -> int:
-        """Remplace le jeu d'entraînement courant et retourne l'identifiant de la nouvelle version."""
+        """Remplace le jeu d'entraînement courant ; retourne le numéro de la nouvelle version."""
 
     @abstractmethod
     def read(self, version: int | None = None) -> pd.DataFrame:

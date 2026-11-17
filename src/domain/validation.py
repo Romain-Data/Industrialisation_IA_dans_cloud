@@ -1,4 +1,6 @@
-from src.domain.features import FEATURE_COLUMNS
+"""Contrôles de qualité des données : colonnes, bornes et catégories autorisées."""
+
+from src.domain.features import CATEGORY_VALUES, FEATURE_COLUMNS
 
 
 def _check_value_ranges(df):
@@ -15,15 +17,38 @@ def _check_value_ranges(df):
     if not df["preparation_time_min"].ge(0).all():
         raise ValueError("Le temps de préparation ne peut pas être négatif.")
 
-    if not df["carrier_capacity"].between(0, 1).all():
-        raise ValueError(
-            "La capacité du transporteur doit être comprise entre 0 et 1."
-        )
+    if not df["carrier_capacity"].ge(0).all():
+        raise ValueError("La capacité du transporteur ne peut pas être négative.")
 
     if not df["stock_available"].isin([0, 1]).all():
         raise ValueError(
             "La variable stock_available doit contenir uniquement 0 ou 1."
         )
+
+    # Les valeurs manquantes sont admises ici : elles sont imputées par le modèle.
+    for column, allowed in CATEGORY_VALUES.items():
+        unknown = set(df[column].dropna()) - set(allowed)
+        if unknown:
+            raise ValueError(
+                f"Valeurs inconnues pour {column} : {sorted(unknown)} "
+                f"(attendu : {list(allowed)})."
+            )
+
+
+REQUIRED_COLUMNS = {
+    "order_id",
+    "order_date",
+    *FEATURE_COLUMNS,
+    "express_eligible",
+}
+
+
+def validate_columns(df):
+    """Contrôle de structure avant nettoyage : toutes les colonnes attendues sont présentes."""
+    missing_columns = REQUIRED_COLUMNS - set(df.columns)
+    if missing_columns:
+        raise ValueError(f"Colonnes obligatoires absentes : {sorted(missing_columns)}")
+    return True
 
 
 def validate_dataset(df):

@@ -1,3 +1,5 @@
+"""Pilotage d'Alembic depuis le code : migrations du schéma et révision courante."""
+
 from pathlib import Path
 
 from alembic import command
@@ -9,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def alembic_config(database_url=None):
+    """Configuration Alembic, éventuellement pointée sur une autre base que DATABASE_URL."""
     config = Config(str(ROOT / "alembic.ini"))
     config.set_main_option("script_location", str(ROOT / "migrations"))
     config.attributes["configure_logger"] = False

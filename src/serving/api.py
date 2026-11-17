@@ -1,3 +1,5 @@
+"""API FastAPI : commandes, prédictions, résultat réel, model card et sondes de santé."""
+
 import uuid
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -7,7 +9,12 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from src.abstraction.order_store import DuplicateOrderError
-from src.config import DATABASE_URL, MODEL_VERSION, PROJECT_NAME
+from src.config import (
+    DATABASE_URL,
+    MODEL_RELOAD_INTERVAL_SECONDS,
+    MODEL_VERSION,
+    PROJECT_NAME,
+)
 from src.infrastructure.dev.order_queue import InMemoryOrderQueue
 from src.infrastructure.order_store import SqlAlchemyOrderStore
 from src.serving.dependencies import (
@@ -17,7 +24,8 @@ from src.serving.dependencies import (
     get_order_store,
     get_worker,
 )
-from src.serving.model_loader import load_model, load_model_card
+from src.serving.model_loader import champion_version, load_model, load_model_card
+from src.serving.model_reloader import ModelReloader
 from src.serving.schemas import (
     Error,
     HealthStatus,
@@ -37,15 +45,18 @@ router = APIRouter()
 
 
 def error_response(status_code, error, message, details=None):
+    """Réponse d'erreur au format du contrat (code stable, message, détails)."""
     body = Error(error=error, message=message, details=details)
     return JSONResponse(status_code=status_code, content=body.model_dump(exclude_none=True))
 
 
 def new_order_id():
+    """Identifiant de commande généré quand le client n'en fournit pas."""
     return f"CMD-{uuid.uuid4().hex[:8]}"
 
 
 async def validation_error_handler(request: Request, exc: RequestValidationError):
+    """Erreur de validation Pydantic -> 422 au format du contrat, champ par champ."""
     details = [
         f"{'.'.join(str(part) for part in err['loc'][1:])}: {err['msg']}"
         for err in exc.errors()
@@ -54,11 +65,13 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
 
 
 async def internal_error_handler(request: Request, exc: Exception):
+    """Erreur inattendue -> 500 avec un message générique, sans détail interne (ADR-0005)."""
     return error_response(500, "internal_error", "Erreur interne.")
 
 
 @router.get("/health", tags=["health"], operation_id="getHealth", response_model=HealthStatus)
 def get_health():
+    """Sonde de vivacité : le service répond."""
     return HealthStatus(status="ok", service=PROJECT_NAME, version=MODEL_VERSION)
 
 
@@ -74,6 +87,7 @@ def get_readiness(
     order_store=Depends(get_order_store),
     worker=Depends(get_worker),
 ):
+    """Sonde de disponibilité : modèle, base, schéma et worker (503 si un contrôle échoue)."""
     checks = {
         "model": "loaded" if model is not None else "not_loaded",
         "order_store": "reachable" if order_store.ping() else "unreachable",
@@ -112,6 +126,7 @@ def create_order(
     order_store=Depends(get_order_store),
     order_queue=Depends(get_order_queue),
 ):
+    """Enregistre la commande, publie l'événement pour le worker, répond 202 sans attendre."""
     order_data = order.model_dump()
     order_data["order_id"] = order.order_id or new_order_id()
 
@@ -145,6 +160,7 @@ def create_order(
     responses={404: {"model": Error}},
 )
 def get_order(order_id: str, order_store=Depends(get_order_store)):
+    """Relit une commande enregistrée (404 si inconnue)."""
     order = order_store.get(order_id)
 
     if order is None:
@@ -162,6 +178,7 @@ def get_order(order_id: str, order_store=Depends(get_order_store)):
     responses={503: {"model": Error}},
 )
 def get_model_card_route(model_card=Depends(get_model_card)):
+    """Model card du champion en service (503 si aucun modèle n'est chargé)."""
     if model_card is None:
         return error_response(503, "model_unavailable", "Aucun modèle en service.")
 
@@ -179,6 +196,7 @@ def get_model_card_route(model_card=Depends(get_model_card)):
 def record_order_outcome(
     order_id: str, outcome: OrderOutcome, order_store=Depends(get_order_store)
 ):
+    """Enregistre le résultat réel d'une commande, cible des entraînements (404 si inconnue)."""
     recorded = order_store.record_outcome(order_id, outcome.express_eligible)
 
     if recorded is None:
@@ -196,6 +214,7 @@ def record_order_outcome(
     responses={422: {"model": Error}, 503: {"model": Error}},
 )
 def create_prediction(order: OrderFeatures, model=Depends(get_model)):
+    """Prédiction immédiate, sans enregistrer la commande (503 sans modèle, 422 si invalide)."""
     if model is None:
         return error_response(503, "model_unavailable", "Le modèle n'est pas chargé.")
 
@@ -218,6 +237,7 @@ def create_prediction(order: OrderFeatures, model=Depends(get_model)):
     responses={404: {"model": Error}},
 )
 def get_prediction(order_id: str, order_store=Depends(get_order_store)):
+    """Relit la prédiction calculée par le worker (404 si elle n'existe pas encore)."""
     prediction = order_store.get_prediction(order_id)
 
     if prediction is None:
@@ -233,16 +253,27 @@ def create_app(
     model_loader=load_model,
     order_queue=None,
     model_card_loader=load_model_card,
+    version_reader=champion_version,
+    reload_interval=MODEL_RELOAD_INTERVAL_SECONDS,
 ):
+    """Construit l'application ; les dépendances sont injectables pour les tests."""
+
+    def load_champion():
+        """Charge le modèle champion et sa model card (qui décrit toujours la version servie)."""
+        try:
+            model = model_loader()
+        except FileNotFoundError:
+            model = None
+        app.state.model_card = model_card_loader() if model is not None else None
+        app.state.model = model
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        try:
-            app.state.model = model_loader()
-        except FileNotFoundError:
-            app.state.model = None
-
-        # Chargée avec le modèle : elle décrit toujours la version servie.
-        app.state.model_card = model_card_loader() if app.state.model is not None else None
+        version = version_reader()
+        load_champion()
+        # Recharge le champion quand l'orchestrateur en promeut un nouveau (ADR-0009).
+        app.state.reloader = ModelReloader(version_reader, load_champion, reload_interval)
+        app.state.reloader.start(version if app.state.model is not None else None)
 
         app.state.order_store = SqlAlchemyOrderStore(database_url)
         app.state.order_queue = order_queue or InMemoryOrderQueue()
@@ -255,6 +286,7 @@ def create_app(
 
         yield
 
+        app.state.reloader.stop()
         app.state.worker.stop()
 
     app = FastAPI(
