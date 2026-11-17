@@ -28,7 +28,8 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/app/.venv/bin:$PATH" \
     PORT=8000 \
-    GIT_PYTHON_REFRESH=quiet
+    GIT_PYTHON_REFRESH=quiet \
+    MLFLOW_DISABLE_AGENT_HINT=1
 
 # curl : utilisé par le health check de Coolify (ADR-0003).
 RUN apt-get update \
@@ -54,7 +55,8 @@ RUN chmod +x docker-entrypoint.sh \
 USER app
 
 # Extensions DuckDB installées au build : aucun téléchargement au démarrage en prod.
-RUN python -c "import duckdb; c = duckdb.connect(); [c.install_extension(e) for e in ('ducklake', 'postgres', 'sqlite')]"
+# Catalogue DuckLake PostgreSQL en prod : l'extension sqlite (dev) n'est pas embarquée.
+RUN python -c "import duckdb; c = duckdb.connect(); [c.install_extension(e) for e in ('ducklake', 'postgres')]"
 
 ENV DUCKLAKE_DATA_PATH=/app/ducklake/
 
