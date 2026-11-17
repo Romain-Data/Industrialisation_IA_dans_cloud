@@ -37,6 +37,18 @@ def _no_model():
     raise FileNotFoundError
 
 
+FAKE_MODEL_CARD = {
+    "project": "eligibilite-livraison-express",
+    "model_version": "1.0.0",
+    "model_type": "LogisticRegression",
+    "task": "binary classification",
+    "target": "express_eligible",
+    "threshold": 0.5,
+    "features": ["hour"],
+    "metrics": {"roc_auc": 0.9},
+}
+
+
 @pytest.fixture(autouse=True)
 def isolated_mlflow(tmp_path, monkeypatch):
     """Registre MLflow temporaire par test (le store est mis en cache par URI)."""
@@ -68,7 +80,9 @@ def database_url(tmp_path):
 
 @pytest.fixture
 def client(database_url):
-    app = create_app(database_url, model_loader=FakeModel)
+    app = create_app(
+        database_url, model_loader=FakeModel, model_card_loader=lambda: dict(FAKE_MODEL_CARD)
+    )
     with TestClient(app) as test_client:
         yield test_client
 

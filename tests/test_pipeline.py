@@ -4,7 +4,7 @@ from mlflow import MlflowClient
 from src.abstraction.collect import Collect
 from src.config import CHAMPION_ALIAS, REGISTERED_MODEL_NAME
 from src.infrastructure.dev.collect import CollectDev
-from src.serving.model_loader import load_model
+from src.serving.model_loader import load_model, load_model_card
 from src.training.pipeline import run_training
 
 
@@ -50,3 +50,16 @@ def test_features_are_logged_with_the_run(tmp_path, monkeypatch):
     features = mlflow.artifacts.load_dict(f"runs:/{run_id}/features.json")
 
     assert "features" in features
+
+
+def test_model_card_reflects_the_champion(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    assert load_model_card() is None
+
+    _, metrics, _ = run_training(SmallCollect())
+    card = load_model_card()
+
+    assert card["metrics"] == metrics
+    assert "distance_km" in card["features"]
+    assert card["trained_at"] is not None
+    assert "Le jeu de données utilisé est synthétique." in card["limitations"]

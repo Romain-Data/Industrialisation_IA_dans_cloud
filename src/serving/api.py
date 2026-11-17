@@ -12,14 +12,16 @@ from src.infrastructure.dev.order_queue import InMemoryOrderQueue
 from src.infrastructure.order_store import SqlAlchemyOrderStore
 from src.serving.dependencies import (
     get_model,
+    get_model_card,
     get_order_queue,
     get_order_store,
     get_worker,
 )
-from src.serving.model_loader import load_model
+from src.serving.model_loader import load_model, load_model_card
 from src.serving.schemas import (
     Error,
     HealthStatus,
+    ModelCard,
     OrderAccepted,
     OrderEvent,
     OrderFeatures,
@@ -151,6 +153,21 @@ def get_order(order_id: str, order_store=Depends(get_order_store)):
     return order
 
 
+@router.get(
+    "/v1/model",
+    tags=["model"],
+    operation_id="getModelCard",
+    summary="Métadonnées et métriques du modèle en service",
+    response_model=ModelCard,
+    responses={503: {"model": Error}},
+)
+def get_model_card_route(model_card=Depends(get_model_card)):
+    if model_card is None:
+        return error_response(503, "model_unavailable", "Aucun modèle en service.")
+
+    return model_card
+
+
 @router.put(
     "/v1/orders/{order_id}/outcome",
     tags=["orders"],
@@ -211,13 +228,21 @@ def get_prediction(order_id: str, order_store=Depends(get_order_store)):
     return prediction
 
 
-def create_app(database_url=DATABASE_URL, model_loader=load_model, order_queue=None):
+def create_app(
+    database_url=DATABASE_URL,
+    model_loader=load_model,
+    order_queue=None,
+    model_card_loader=load_model_card,
+):
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         try:
             app.state.model = model_loader()
         except FileNotFoundError:
             app.state.model = None
+
+        # Chargée avec le modèle : elle décrit toujours la version servie.
+        app.state.model_card = model_card_loader() if app.state.model is not None else None
 
         app.state.order_store = SqlAlchemyOrderStore(database_url)
         app.state.order_queue = order_queue or InMemoryOrderQueue()

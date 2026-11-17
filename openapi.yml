@@ -278,6 +278,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ModelCard"
+        "503":
+          description: Aucun modèle en service
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   /metrics:
     get:
