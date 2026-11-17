@@ -29,3 +29,6 @@ artifacts/
 # DuckLake (dev)
 ducklake_data/
 *.sqlite
+
+# Progression personnelle (quiz, scores) : locale, jamais publiée
+IndusIAdansCloud/Progression/
