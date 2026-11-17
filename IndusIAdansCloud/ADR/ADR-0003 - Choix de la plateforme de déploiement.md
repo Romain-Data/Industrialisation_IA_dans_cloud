@@ -64,6 +64,13 @@ Cette décision porte sur la plateforme d'exécution uniquement. Le déclencheme
 - Garder dans le dépôt un `Dockerfile` et une configuration ne dépendant que de variables d'environnement.
 - Traiter le rechargement du modèle après entraînement dans l'ADR-0004 ou dans une évolution du service.
 
+## Mise à jour (2026-11-17) : deux images, deux environnements Compose
+
+- **Deux images au lieu d'une** : la même base, deux cibles Docker. `api` (API, worker, entraînement, ETL) reste minimale ; `orchestrator` y ajoute Prefect pour exécuter les flows planifiés (ADR-0009). Toutes deux sont construites une seule fois par la CI et promues telles quelles en prod (ADR-0004).
+- **`docker-compose.test.yml`** : toute la chaîne construite depuis les sources, ERP simulé compris (repris du compose de l'ERP par `include`) ; un service `migrate` crée les bases et applique les migrations une seule fois avant l'API et l'orchestrateur, ce qui évite qu'ils le fassent en même temps.
+- **`docker-compose.prod.yml`** : images publiées (`APP_VERSION`), ERP externe (`ERP_MONGO_URI`), secrets obligatoires sans valeur par défaut, limites de ressources (API 1 Go, orchestrateur 1,5 Go, Prefect 512 Mo, PostgreSQL 256 Mo), redémarrage automatique, ports publiés seulement en local. Mesuré le 2026-11-17 avec les images 0.2.0 : environ 1 Go utilisé au total après un entraînement.
+- **Coolify** : le compose de prod décrit la cible ; son déploiement sur le VPS (serveur Prefect et orchestrateur à côté des applications existantes) est l'étape suivante.
+
 ## Alternatives considered
 
 - **Docker Compose géré à la main** : respecte Docker, mais recrée HTTPS, déploiement et supervision que Coolify fournit déjà ; écarté.

@@ -83,16 +83,26 @@ curl -X POST https://express-delivery-preprod.romaincollery.com/v1/predictions \
 
 ### Avec Docker Compose (recommandé)
 
-Prérequis : Docker.
+Prérequis : Docker. Deux environnements, chacun dans son fichier :
+
+| Fichier | Contenu | Usage |
+|---|---|---|
+| [`docker-compose.test.yml`](docker-compose.test.yml) | Toute la chaîne construite depuis les sources : **ERP simulé** (PostgreSQL + MongoDB), notre PostgreSQL, API, serveur Prefect et orchestrateur | Tester l'ensemble sur une machine |
+| [`docker-compose.prod.yml`](docker-compose.prod.yml) | Images **publiées** par la CI (`APP_VERSION`), branchées sur l'ERP de l'entreprise (`ERP_MONGO_URI`), sans simulateur ; limites de ressources, redémarrage automatique | Exploiter une version publiée |
+
+Aucun mot de passe n'est écrit dans le dépôt : ils sont obligatoires.
 
 ```bash
-docker compose up -d --build        # PostgreSQL + API sur http://localhost:8000
-docker compose run --rm train       # premier entraînement (données synthétiques)
-docker compose restart api          # l'API charge le modèle champion
-curl http://localhost:8000/health/ready
+export POSTGRES_PASSWORD=$(openssl rand -hex 16) ERP_POSTGRES_PASSWORD=$(openssl rand -hex 16)
+docker compose -f docker-compose.test.yml up -d --build
 ```
 
-`docker compose down` arrête la stack ; ajouter `-v` efface aussi les données.
+La stack s'amorce seule : le flow Prefect (toutes les 2 minutes en test) importe les commandes de l'ERP et entraîne le modèle, puis l'API le charge sans redémarrer (2 à 3 minutes au premier démarrage). API : http://127.0.0.1:8000/docs ; Prefect : http://127.0.0.1:4200. `docker compose -f docker-compose.test.yml down -v` arrête tout et efface les données.
+
+```bash
+# Prod : version publiée, ERP externe, secrets fournis par l'environnement (.env non commité)
+APP_VERSION=0.2.0 POSTGRES_PASSWORD=... ERP_MONGO_URI=mongodb://... docker compose -f docker-compose.prod.yml up -d
+```
 
 ### En local avec uv
 
@@ -172,7 +182,7 @@ Toute la configuration passe par des variables d'environnement ([`src/config.py`
 | `PREFECT_API_URL` | — | Serveur Prefect utilisé par l'orchestrateur |
 | `PORT` | `8000` | Port de l'API dans le conteneur |
 
-En PostgreSQL, les URL utilisent le driver psycopg 3 : `postgresql+psycopg://utilisateur@hôte:5432/base`. Le mot de passe peut être fourni par la variable standard `PGPASSWORD` plutôt que dans l'URL (c'est ce que fait `docker-compose.yml`). Au démarrage, le conteneur crée les bases `mlflow` et `ducklake` si elles n'existent pas, puis applique les migrations.
+En PostgreSQL, les URL utilisent le driver psycopg 3 : `postgresql+psycopg://utilisateur@hôte:5432/base`. Le mot de passe peut être fourni par la variable standard `PGPASSWORD` plutôt que dans l'URL (c'est ce que font les fichiers docker-compose). Au démarrage, le conteneur crée les bases `mlflow` et `ducklake` si elles n'existent pas, puis applique les migrations.
 
 ## Tests et qualité
 

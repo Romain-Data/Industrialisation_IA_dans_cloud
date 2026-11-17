@@ -77,6 +77,9 @@ et `RECENT_HISTORY_ORDERS` contrôle le jeu partagé 2023 -> hier écrit dans le
 deux bases. Pour désactiver complètement un historique, utiliser
 `POSTGRES_HISTORY_ORDERS=0` ou `RECENT_HISTORY_ORDERS=0`.
 
+Les ports publiés (`ERP_POSTGRES_PORT`, `ERP_MONGO_PORT` : 5432 et 27017 par défaut) ne
+sont ouverts que sur `127.0.0.1`.
+
 Arrêter les conteneurs sans perdre les données :
 
 ```bash
