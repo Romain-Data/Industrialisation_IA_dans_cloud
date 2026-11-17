@@ -78,6 +78,21 @@ class Prediction(BaseModel):
     )
 
 
+class ModelCard(BaseModel):
+    """Model card de la cellule 55 du notebook."""
+
+    project: str
+    model_version: str
+    model_type: str
+    task: str
+    target: str
+    threshold: float
+    trained_at: datetime | None = None
+    features: list[str]
+    metrics: dict[str, float]
+    limitations: list[str] | None = None
+
+
 class HealthStatus(BaseModel):
     status: Literal["ok"]
     service: str
