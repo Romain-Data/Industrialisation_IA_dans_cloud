@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from src.serving.api import create_app
 from src.serving.dependencies import get_order_store
 from src.serving.schemas import OrderEvent
-from tests.conftest import FakeModel, wait_for
+from tests.conftest import NO_RELOAD, FakeModel, wait_for
 
 CONTRACT = yaml.safe_load(
     (Path(__file__).parent.parent / "openapi.yml").read_text(encoding="utf-8")
@@ -42,7 +42,7 @@ def test_readiness_fails_without_model(client_without_model):
 
 
 def test_readiness_fails_when_schema_is_not_migrated(tmp_path):
-    app = create_app(f"sqlite:///{tmp_path / 'empty.db'}", model_loader=FakeModel)
+    app = create_app(f"sqlite:///{tmp_path / 'empty.db'}", model_loader=FakeModel, **NO_RELOAD)
 
     with TestClient(app) as test_client:
         response = test_client.get("/health/ready")
@@ -164,7 +164,7 @@ def test_unexpected_error_returns_contract_500(database_url, valid_order):
         def save(self, order):
             raise RuntimeError("boom")
 
-    app = create_app(database_url, model_loader=FakeModel)
+    app = create_app(database_url, model_loader=FakeModel, **NO_RELOAD)
     app.dependency_overrides[get_order_store] = BrokenStore
 
     with TestClient(app, raise_server_exceptions=False) as test_client:

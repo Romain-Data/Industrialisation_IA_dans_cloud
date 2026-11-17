@@ -25,6 +25,15 @@ LIMITATIONS = [
 ]
 
 
+def champion_version():
+    """Numéro de version du champion dans le registre, ou None s'il n'y en a pas."""
+    mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+    try:
+        return MlflowClient().get_model_version_by_alias(REGISTERED_MODEL_NAME, CHAMPION_ALIAS).version
+    except mlflow.MlflowException:
+        return None
+
+
 def load_model():
     """Charge la version du modèle portant l'alias champion dans le registre MLflow."""
     mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)

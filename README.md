@@ -140,6 +140,17 @@ TRAINING_SOURCE=ducklake uv run python -m src.training.pipeline         # entra�
 
 Chaque commande est nettoyée puis validée ; les commandes invalides sont rejetées et comptées. Chaque import est consigné dans la table `erp_imports` (position de reprise et compteurs).
 
+## Orchestration (Prefect)
+
+Le flow `erp-pipeline` ([ADR-0009](IndusIAdansCloud/ADR/ADR-0009%20-%20Orchestration%20du%20r%C3%A9entra%C3%AEnement.md)) tourne toutes les heures : import ERP, puis réentraînement si au moins `RETRAIN_MIN_NEW_ORDERS` nouvelles commandes étiquetées sont arrivées. L'API recharge d'elle-même un nouveau champion (vérification chaque minute), sans redémarrage.
+
+```bash
+uv run prefect server start                                   # interface sur http://127.0.0.1:4200
+PREFECT_API_URL=http://127.0.0.1:4200/api uv run python -m src.orchestration.serve
+```
+
+En Docker, l'orchestrateur est une image à part (`--target orchestrator`) : l'image de l'API ne contient pas Prefect.
+
 ## Configuration
 
 Toute la configuration passe par des variables d'environnement ([`src/config.py`](src/config.py)).
@@ -155,6 +166,10 @@ Toute la configuration passe par des variables d'environnement ([`src/config.py`
 | `ERP_MONGO_URI` | `mongodb://localhost:27017` | Base analytique MongoDB de l'ERP, lue en lecture seule (ADR-0007) |
 | `ERP_MONGO_DATABASE` / `ERP_MONGO_COLLECTION` | `livraison_express` / `orders` | Base et collection des commandes ERP |
 | `ERP_IMPORT_BATCH_SIZE` | `1000` | Taille des lots lus par l'ETL ERP |
+| `ERP_PIPELINE_CRON` | `0 * * * *` | Planification du flow Prefect `erp-pipeline` |
+| `RETRAIN_MIN_NEW_ORDERS` | `500` | Nouvelles commandes étiquetées nécessaires pour réentraîner |
+| `MODEL_RELOAD_INTERVAL_SECONDS` | `60` | Vérification du champion par l'API (0 : désactivée) |
+| `PREFECT_API_URL` | — | Serveur Prefect utilisé par l'orchestrateur |
 | `PORT` | `8000` | Port de l'API dans le conteneur |
 
 En PostgreSQL, les URL utilisent le driver psycopg 3 : `postgresql+psycopg://utilisateur@hôte:5432/base`. Le mot de passe peut être fourni par la variable standard `PGPASSWORD` plutôt que dans l'URL (c'est ce que fait `docker-compose.yml`). Au démarrage, le conteneur crée les bases `mlflow` et `ducklake` si elles n'existent pas, puis applique les migrations.
@@ -175,7 +190,7 @@ Le dépôt suit **GitFlow** (détails dans [CONTRIBUTING.md](CONTRIBUTING.md)). 
 2. sur `develop` et sur une GitHub Release : construit l'image `linux/amd64`, vérifie qu'elle démarre, la scanne avec Trivy, la publie sur `ghcr.io/romain-data/industrialisation_ia_dans_cloud` (tags `sha-xxxxxxx` et `X.Y.Z`) ;
 3. déploie avec Coolify : `develop` → preprod, release → prod. Coolify ne met la nouvelle version en service que si `/health/ready` répond.
 
-L'image Docker ([`Dockerfile`](Dockerfile)) est construite en deux étapes avec uv, tourne avec un utilisateur non root et sert à la fois l'API (`api`, par défaut), l'entraînement (`train`), l'import de l'ERP (`etl`) et les migrations (`migrate`).
+L'image Docker ([`Dockerfile`](Dockerfile)) est construite en deux étapes avec uv, tourne avec un utilisateur non root et sert à la fois l'API (`api`, par défaut), l'entraînement (`train`), l'import de l'ERP (`etl`) et les migrations (`migrate`) ; la cible `orchestrator` ajoute Prefect pour exécuter les flows.
 
 ## Structure du dépôt
 
@@ -205,6 +220,7 @@ Les choix structurants sont documentés sous forme d'ADR dans [`IndusIAdansCloud
 | ADR-0005 : Quelle stratégie de déploiement ? | [ADR-0004](IndusIAdansCloud/ADR/ADR-0004%20-%20Strat%C3%A9gie%20de%20d%C3%A9ploiement.md) | CI GitHub Actions, GitFlow, preprod / prod |
 | ADR-0006 : PostgreSQL, MongoDB, autre ? | [ADR-0007](IndusIAdansCloud/ADR/ADR-0007%20-%20PostgreSQL%2C%20MongoDB%20ou%20autre.md) | MongoDB analytique en lecture seule, ETL |
 | ADR-0007 : Sécuriser les entrées, sorties et l'accès à la donnée | [ADR-0005](IndusIAdansCloud/ADR/ADR-0005%20-%20S%C3%A9curisation%20des%20entr%C3%A9es%2C%20sorties%20et%20acc%C3%A8s%20%C3%A0%20la%20donn%C3%A9e.md) | secrets, image, CI, dépôt, limites connues |
+| *(hors barème)* | [ADR-0009](IndusIAdansCloud/ADR/ADR-0009%20-%20Orchestration%20du%20r%C3%A9entra%C3%AEnement.md) | orchestration Prefect : import ERP horaire, réentraînement, rechargement du modèle |
 | *(hors barème)* | [ADR-0006](IndusIAdansCloud/ADR/ADR-0006%20-%20File%20d'attente.md) | file d'attente des commandes (en mémoire, worker) |
 
 ## Contribuer

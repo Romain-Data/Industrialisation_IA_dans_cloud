@@ -30,6 +30,14 @@ dev = [
     "ruff>=0.17.5",
     "seaborn>=0.13.2",
 ]
+orchestration = [
+    "prefect==3.9.3",
+]
+
+[tool.uv]
+# En local et en CI : outils de dev et orchestration. Les images Docker choisissent
+# explicitement leurs groupes (aucun pour l'API, `orchestration` pour l'orchestrateur).
+default-groups = ["dev", "orchestration"]
 
 [tool.ruff]
 # Notebooks exploratoires : hors du lint de la CI.
