@@ -1,3 +1,5 @@
+"""Prédiction d'une commande : validation, probabilité et décision selon le seuil."""
+
 from datetime import UTC, datetime
 
 import pandas as pd

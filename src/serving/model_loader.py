@@ -1,3 +1,5 @@
+"""Chargement du modèle champion et de sa model card depuis le registre MLflow (ADR-0002)."""
+
 from datetime import UTC, datetime
 
 import mlflow

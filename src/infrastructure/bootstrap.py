@@ -1,8 +1,8 @@
 """Prépare les bases PostgreSQL au démarrage du conteneur (ADR-0003).
 
-Un seul conteneur PostgreSQL héberge des bases distinctes pour les commandes et
-pour le registre MLflow et le catalogue DuckLake. Coolify ne crée que la première : les autres sont créées
-ici si elles n'existent pas. Sans effet pour SQLite ou un serveur MLflow distant.
+Un seul conteneur PostgreSQL héberge des bases distinctes pour les commandes, le
+registre MLflow et le catalogue DuckLake. Coolify ne crée que la première : les
+autres sont créées ici si elles n'existent pas. Sans effet pour SQLite ou un serveur MLflow distant.
 """
 
 from sqlalchemy import create_engine, text
@@ -42,6 +42,7 @@ def ensure_database(url):
 
 
 def main():
+    """Crée les bases PostgreSQL manquantes (commandes, MLflow, DuckLake) au démarrage."""
     for url in (DATABASE_URL, MLFLOW_TRACKING_URI, DUCKLAKE_CATALOG_URL):
         if ensure_database(url):
             print(f"Base créée : {make_url(url).database}")

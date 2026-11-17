@@ -1,3 +1,5 @@
+"""Stockage SQLAlchemy des commandes et prédictions (SQLite en dev, PostgreSQL en prod)."""
+
 from datetime import UTC, datetime
 
 import pandas as pd
@@ -21,7 +23,7 @@ from src.infrastructure.migrations import current_revision, head_revision
 
 
 class Base(DeclarativeBase):
-    pass
+    """Base déclarative commune aux tables SQLAlchemy (utilisée par Alembic)."""
 
 
 class OrderRecord(Base):

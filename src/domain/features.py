@@ -1,3 +1,5 @@
+"""Variables du modèle, cible et vocabulaire ERP (ADR-0007) : source unique du projet."""
+
 TARGET_COLUMN = "express_eligible"
 
 # Vocabulaire des données : celui de l'ERP, système de référence de l'entreprise (ADR-0007).
@@ -49,4 +51,3 @@ CATEGORICAL_FEATURES = [
     "delivery_zone",
     "customer_type",
 ]
-

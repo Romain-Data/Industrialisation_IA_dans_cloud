@@ -1,3 +1,5 @@
+"""Registre MLflow : configuration de l'expérience et promotion du champion (ADR-0002)."""
+
 from pathlib import Path
 
 import mlflow

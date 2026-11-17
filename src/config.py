@@ -1,3 +1,5 @@
+"""Configuration de l'application : constantes et variables d'environnement, sans secret."""
+
 import os
 from pathlib import Path
 

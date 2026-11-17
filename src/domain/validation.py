@@ -1,3 +1,5 @@
+"""Contrôles de qualité des données : colonnes, bornes et catégories autorisées."""
+
 from src.domain.features import CATEGORY_VALUES, FEATURE_COLUMNS
 
 

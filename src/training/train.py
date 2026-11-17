@@ -1,3 +1,5 @@
+"""Entraînement du modèle (régression logistique scikit-learn) et journalisation dans MLflow."""
+
 import mlflow
 import mlflow.sklearn
 from sklearn.compose import ColumnTransformer
@@ -26,6 +28,11 @@ from src.training.registry import configure_mlflow
 
 
 def train_model(df, params=None):
+    """Entraîne le pipeline, l'évalue sur 20 % des données et l'enregistre dans MLflow.
+
+    Retourne (pipeline, métriques, run_id). `params` complète les paramètres du run
+    (provenance des données, numéro de snapshot DuckLake...).
+    """
     X = df[FEATURE_COLUMNS]
     y = df[TARGET_COLUMN]
 

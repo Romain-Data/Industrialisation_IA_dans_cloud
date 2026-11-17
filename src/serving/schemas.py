@@ -1,3 +1,5 @@
+"""Schémas Pydantic de l'API, alignés sur le contrat openapi.yml."""
+
 from datetime import datetime
 from typing import Literal
 
@@ -54,6 +56,7 @@ class OrderEvent(BaseModel):
 
 
 class OrderAccepted(BaseModel):
+    """Réponse 202 : la commande est enregistrée, sa prédiction viendra."""
     order_id: str
     status: Literal["accepted"]
 
@@ -70,12 +73,14 @@ class OrderOutcome(BaseModel):
 
 
 class OrderOutcomeRecorded(BaseModel):
+    """Résultat réel enregistré pour une commande."""
     order_id: str
     express_eligible: bool
     recorded_at: datetime
 
 
 class Prediction(BaseModel):
+    """Prédiction d'éligibilité express d'une commande."""
     order_id: str
     express_eligible: bool
     decision: Literal["oui", "non"]
@@ -103,18 +108,21 @@ class ModelCard(BaseModel):
 
 
 class HealthStatus(BaseModel):
+    """Réponse de la sonde de vivacité."""
     status: Literal["ok"]
     service: str
     version: str
 
 
 class ReadinessStatus(BaseModel):
+    """Réponse de la sonde de disponibilité, avec le détail de chaque contrôle."""
     status: Literal["ready", "not_ready"]
     checks: dict[str, str]
     version: str | None = None
 
 
 class Error(BaseModel):
+    """Erreur au format commun à toutes les routes."""
     error: str = Field(description="Code d'erreur stable", examples=["validation_error"])
     message: str = Field(description="Message destiné à l'humain")
     details: list[str] | None = None
