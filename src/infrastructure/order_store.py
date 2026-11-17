@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 
+import pandas as pd
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
@@ -8,13 +9,14 @@ from sqlalchemy import (
     Integer,
     String,
     create_engine,
+    select,
     text,
 )
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
 from src.abstraction.order_store import DuplicateOrderError, OrderStore
-from src.domain.features import FEATURE_COLUMNS
+from src.domain.features import FEATURE_COLUMNS, TARGET_COLUMN
 from src.infrastructure.migrations import current_revision, head_revision
 
 
@@ -29,6 +31,9 @@ class OrderRecord(Base):
     __table_args__ = (
         CheckConstraint("weekend IN (0, 1)", name="ck_commandes_weekend"),
         CheckConstraint("stock_available IN (0, 1)", name="ck_commandes_stock"),
+        CheckConstraint(
+            "express_eligible IN (0, 1)", name="ck_commandes_express_eligible"
+        ),
     )
 
     order_id: Mapped[str] = mapped_column(String, primary_key=True)
@@ -46,6 +51,11 @@ class OrderRecord(Base):
     customer_type: Mapped[str] = mapped_column(String)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    # Résultat observé (cible d'entraînement), connu après coup (migration 0002).
+    express_eligible: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    outcome_recorded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
 
 
@@ -95,6 +105,43 @@ class SqlAlchemyOrderStore(OrderStore):
                 for column in ["order_id", *FEATURE_COLUMNS]
             }
 
+    def record_outcome(self, order_id, express_eligible):
+        with Session(self._engine) as session:
+            record = session.get(OrderRecord, order_id)
+
+            if record is None:
+                return None
+
+            record.express_eligible = int(express_eligible)
+            record.outcome_recorded_at = datetime.now(UTC)
+            session.commit()
+
+            return {
+                "order_id": order_id,
+                "express_eligible": bool(record.express_eligible),
+                "recorded_at": _as_utc(record.outcome_recorded_at),
+            }
+
+    def export_labeled_orders(self):
+        columns = [
+            OrderRecord.order_id,
+            OrderRecord.created_at.label("order_date"),
+            *(getattr(OrderRecord, column) for column in FEATURE_COLUMNS),
+            OrderRecord.express_eligible.label(TARGET_COLUMN),
+        ]
+        query = (
+            select(*columns)
+            .where(OrderRecord.express_eligible.is_not(None))
+            .order_by(OrderRecord.created_at)
+        )
+
+        with self._engine.connect() as connection:
+            orders = pd.read_sql(query, connection)
+
+        # Dates en UTC sans fuseau : même représentation pour SQLite et PostgreSQL.
+        orders["order_date"] = pd.to_datetime(orders["order_date"], utc=True).dt.tz_localize(None)
+        return orders
+
     def ping(self):
         try:
             with self._engine.connect() as connection:
@@ -121,12 +168,7 @@ class SqlAlchemyOrderStore(OrderStore):
                 for column in PredictionRecord.__table__.columns
             }
 
-            # SQLite ne conserve pas le fuseau horaire.
-            if prediction["predicted_at"].tzinfo is None:
-                prediction["predicted_at"] = prediction["predicted_at"].replace(
-                    tzinfo=UTC
-                )
-
+            prediction["predicted_at"] = _as_utc(prediction["predicted_at"])
             return prediction
 
     def schema_is_current(self):
@@ -134,3 +176,10 @@ class SqlAlchemyOrderStore(OrderStore):
             return current_revision(self._engine) == head_revision()
         except Exception:  # noqa: BLE001 - sonde de santé : toute erreur = schéma non vérifiable
             return False
+
+
+def _as_utc(value):
+    """SQLite ne conserve pas le fuseau horaire : les dates relues sont en UTC."""
+    if value is not None and value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value
