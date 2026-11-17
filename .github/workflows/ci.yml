@@ -1,22 +1,24 @@
-# CI/CD (ADR-0004)
-#   - push / pull request : lint (ruff) + tests (pytest)
-#   - push sur main       : + image linux/amd64 sur GHCR + déploiement preprod
-#   - tag vX.Y.Z          : + image linux/amd64 sur GHCR + déploiement prod
+# CI/CD (ADR-0004, GitFlow)
+#   - push / pull request      : ruff + pylint + pytest
+#   - push sur develop         : + image (test de démarrage, scan Trivy) sur GHCR + déploiement preprod
+#   - GitHub Release publiée   : + image vX.Y.Z (mêmes contrôles) sur GHCR + déploiement prod
+#   - push sur main            : contrôles uniquement (la prod ne part que d'une release)
 #
 # Configuration GitHub attendue (Settings > Environments) :
 #   environnements `preprod` et `prod`, chacun avec :
 #     - variable COOLIFY_APP_UUID : UUID de l'application Coolify
-#   secrets du dépôt (ou par environnement) :
+#   secrets du dépôt :
 #     - COOLIFY_URL   : ex. https://coolify.example.com (sans / final)
-#     - COOLIFY_TOKEN : token API Coolify (droit write + deploy)
+#     - COOLIFY_TOKEN : token API Coolify limité au projet (droits write + deploy)
 
 name: CI
 
 on:
   push:
     branches: ["**"]
-    tags: ["v*.*.*"]
   pull_request:
+  release:
+    types: [published]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -45,13 +47,16 @@ jobs:
       - name: Lint (ruff)
         run: uv run ruff check . --output-format github
 
+      - name: Qualité (pylint, seuil dans pyproject.toml)
+        run: uv run pylint src
+
       - name: Tests (pytest)
         run: uv run pytest -q
 
   build:
     name: Image Docker
     needs: checks
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/develop') || github.event_name == 'release'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -67,22 +72,67 @@ jobs:
 
       - uses: docker/setup-buildx-action@v4
 
-      - uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      # Deux tags (ADR-0004) : le SHA du commit, et la version pour un tag vX.Y.Z.
+      # Deux tags (ADR-0004) : le SHA du commit, et la version pour une release vX.Y.Z.
       - id: meta
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=${{ steps.vars.outputs.sha_tag }}
-            type=semver,pattern={{version}}
+            type=semver,pattern={{version}},enable=${{ github.event_name == 'release' }}
 
-      - uses: docker/build-push-action@v7
+      # 1. Construire localement pour tester avant de publier.
+      - name: Construire l'image (sans publier)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: local/express-delivery:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # 2. L'image démarre : migrations appliquées, base joignable (SQLite par défaut, sans modèle).
+      - name: Tester le démarrage de l'image
+        run: |
+          docker run -d --name smoke -p 8000:8000 local/express-delivery:ci
+          for _ in $(seq 1 30); do
+            curl -sf http://localhost:8000/health >/dev/null && break
+            sleep 2
+          done
+          ready=$(curl -s http://localhost:8000/health/ready)
+          echo "$ready"
+          echo "$ready" | grep -q '"order_store":"reachable"'
+          echo "$ready" | grep -q '"schema":"up_to_date"'
+          docker rm -f smoke
+
+      # 3. Sécurité : rapport complet, puis échec sur toute vulnérabilité critique corrigeable.
+      - name: Scanner l'image (Trivy, rapport)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: local/express-delivery:ci
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "0"
+
+      - name: Scanner l'image (Trivy, blocage sur CRITICAL)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: local/express-delivery:ci
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          skip-setup-trivy: true
+
+      # 4. Publier l'image testée (reconstruction instantanée depuis le cache).
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publier l'image
+        uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/amd64
@@ -90,13 +140,12 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
-          cache-to: type=gha,mode=max
 
   deploy:
-    name: Déploiement ${{ startsWith(github.ref, 'refs/tags/v') && 'prod' || 'preprod' }}
+    name: Déploiement ${{ github.event_name == 'release' && 'prod' || 'preprod' }}
     needs: build
     runs-on: ubuntu-latest
-    environment: ${{ startsWith(github.ref, 'refs/tags/v') && 'prod' || 'preprod' }}
+    environment: ${{ github.event_name == 'release' && 'prod' || 'preprod' }}
     env:
       COOLIFY_URL: ${{ secrets.COOLIFY_URL }}
       COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
@@ -109,7 +158,7 @@ jobs:
         id: config
         run: |
           if [ -z "$APP_UUID" ]; then
-            echo "::warning::COOLIFY_APP_UUID non défini pour l'environnement ${{ startsWith(github.ref, 'refs/tags/v') && 'prod' || 'preprod' }} : déploiement ignoré."
+            echo "::warning::COOLIFY_APP_UUID non défini pour l'environnement ${{ github.event_name == 'release' && 'prod' || 'preprod' }} : déploiement ignoré."
             echo "ready=false" >> "$GITHUB_OUTPUT"
           else
             echo "ready=true" >> "$GITHUB_OUTPUT"

@@ -37,6 +37,10 @@ extend-exclude = ["*.ipynb"]
 # Injection de dépendances FastAPI : Depends() en valeur par défaut est voulu.
 extend-immutable-calls = ["fastapi.Depends"]
 
+[tool.pylint.main]
+# Garde-fou contre la régression de qualité (CI) ; à remonter progressivement.
+fail-under = 8.5
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]

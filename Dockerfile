@@ -31,8 +31,9 @@ ENV PYTHONUNBUFFERED=1 \
     GIT_PYTHON_REFRESH=quiet \
     MLFLOW_DISABLE_AGENT_HINT=1
 
-# curl : utilisé par le health check de Coolify (ADR-0003).
+# Correctifs de sécurité Debian (scan Trivy en CI) + curl, utilisé par le health check de Coolify.
 RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
     && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
