@@ -1,5 +1,11 @@
 from src.abstraction.collect import Collect
-from src.config import CHAMPION_ALIAS
+from src.config import (
+    CHAMPION_ALIAS,
+    DATABASE_URL,
+    DUCKLAKE_CATALOG_URL,
+    DUCKLAKE_DATA_PATH,
+    TRAINING_SOURCE,
+)
 from src.domain.cleaning import clean_orders_data
 from src.domain.validation import validate_dataset
 from src.training.registry import promote_if_better
@@ -14,7 +20,9 @@ def run_training(collector: Collect):
     orders_clean = clean_orders_data(raw_orders)
     validate_dataset(orders_clean)
 
-    model_pipeline, metrics, run_id = train_model(orders_clean)
+    model_pipeline, metrics, run_id = train_model(
+        orders_clean, params=getattr(collector, "tracking_params", None)
+    )
     promoted = promote_if_better(run_id)
 
     print("Entraînement terminé.")
@@ -25,7 +33,27 @@ def run_training(collector: Collect):
     return model_pipeline, metrics, run_id
 
 
-if __name__ == "__main__":
-    from src.infrastructure.dev.collect import CollectDev
+def build_collector(source=None):
+    """Choisit la source d'entraînement (variable TRAINING_SOURCE)."""
+    source = source or TRAINING_SOURCE
 
-    run_training(CollectDev())
+    if source == "synthetic":
+        from src.infrastructure.dev.collect import CollectDev
+
+        return CollectDev()
+
+    if source == "ducklake":
+        from src.infrastructure.collect_ducklake import CollectDuckLake
+        from src.infrastructure.ducklake_store import DuckLakeSnapshotStore
+        from src.infrastructure.order_store import SqlAlchemyOrderStore
+
+        return CollectDuckLake(
+            SqlAlchemyOrderStore(DATABASE_URL),
+            DuckLakeSnapshotStore(DUCKLAKE_CATALOG_URL, DUCKLAKE_DATA_PATH),
+        )
+
+    raise ValueError(f"TRAINING_SOURCE inconnue : {source} (synthetic ou ducklake)")
+
+
+if __name__ == "__main__":
+    run_training(build_collector())

@@ -23,6 +23,8 @@ from src.serving.schemas import (
     OrderAccepted,
     OrderEvent,
     OrderFeatures,
+    OrderOutcome,
+    OrderOutcomeRecorded,
     Prediction,
     ReadinessStatus,
 )
@@ -147,6 +149,25 @@ def get_order(order_id: str, order_store=Depends(get_order_store)):
         return error_response(404, "order_not_found", f"Commande inconnue : {order_id}")
 
     return order
+
+
+@router.put(
+    "/v1/orders/{order_id}/outcome",
+    tags=["orders"],
+    operation_id="recordOrderOutcome",
+    summary="Enregistrer le résultat réel d'une commande",
+    response_model=OrderOutcomeRecorded,
+    responses={404: {"model": Error}, 422: {"model": Error}},
+)
+def record_order_outcome(
+    order_id: str, outcome: OrderOutcome, order_store=Depends(get_order_store)
+):
+    recorded = order_store.record_outcome(order_id, outcome.express_eligible)
+
+    if recorded is None:
+        return error_response(404, "order_not_found", f"Commande inconnue : {order_id}")
+
+    return recorded
 
 
 @router.post(

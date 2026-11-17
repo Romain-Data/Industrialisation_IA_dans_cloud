@@ -196,7 +196,17 @@ def test_session_1_routes_are_implemented(client):
 
 
 @pytest.mark.parametrize(
-    "schema", ["OrderFeatures", "Prediction", "OrderAccepted", "HealthStatus", "ReadinessStatus", "Error"]
+    "schema",
+    [
+        "OrderFeatures",
+        "OrderOutcome",
+        "OrderOutcomeRecorded",
+        "Prediction",
+        "OrderAccepted",
+        "HealthStatus",
+        "ReadinessStatus",
+        "Error",
+    ],
 )
 def test_schemas_match_contract(client, schema):
     generated = client.get("/openapi.json").json()["components"]["schemas"][schema]

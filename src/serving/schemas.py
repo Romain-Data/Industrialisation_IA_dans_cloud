@@ -49,6 +49,23 @@ class OrderAccepted(BaseModel):
     status: Literal["accepted"]
 
 
+class OrderOutcome(BaseModel):
+    """Résultat observé d'une commande (cible d'entraînement)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    express_eligible: bool = Field(
+        description="La commande est-elle réellement partie en livraison express ?",
+        examples=[True],
+    )
+
+
+class OrderOutcomeRecorded(BaseModel):
+    order_id: str
+    express_eligible: bool
+    recorded_at: datetime
+
+
 class Prediction(BaseModel):
     order_id: str
     express_eligible: bool
