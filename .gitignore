@@ -23,3 +23,5 @@ IndusIAdansCloud/.obsidian/community-plugins.json
 mlruns/
 mlartifacts/
 artifacts/
+
+.env
