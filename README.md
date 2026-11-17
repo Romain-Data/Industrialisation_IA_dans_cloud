@@ -187,6 +187,7 @@ Les choix structurants sont documentés sous forme d'ADR dans [`IndusIAdansCloud
 - [ADR-0004](IndusIAdansCloud/ADR/ADR-0004%20-%20Strat%C3%A9gie%20de%20d%C3%A9ploiement.md) : stratégie de déploiement (CI, GitFlow, preprod / prod)
 - [ADR-0005](IndusIAdansCloud/ADR/ADR-0005%20-%20S%C3%A9curisation.md) : sécurisation (secrets, image, CI, dépôt, limites connues)
 - [ADR-0006](IndusIAdansCloud/ADR/ADR-0006%20-%20File%20d'attente.md) : file d'attente des commandes (en mémoire, worker)
+- [ADR-0007](IndusIAdansCloud/ADR/ADR-0007%20-%20Source%20des%20donn%C3%A9es%20ERP.md) : source des données ERP (MongoDB analytique, ETL)
 
 ## Contribuer
 
