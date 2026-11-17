@@ -70,13 +70,13 @@ curl -X POST https://express-delivery-preprod.romaincollery.com/v1/predictions \
   -H "Content-Type: application/json" \
   -d '{"hour": 14, "day_of_week": 2, "weekend": 0, "distance_km": 3.5,
        "order_value_eur": 89.9, "weight_kg": 2.4, "stock_available": 1,
-       "preparation_time_min": 18, "carrier_capacity": 0.85,
-       "weather": "normal", "delivery_zone": "centre", "customer_type": "premium"}'
+       "preparation_time_min": 18, "carrier_capacity": 34.5,
+       "weather": "clear", "delivery_zone": "centre", "customer_type": "business"}'
 ```
 
 ```json
 {"order_id": "CMD-1a2b3c4d", "express_eligible": true, "decision": "oui",
- "probability": 0.9377, "model_version": "1.0.0", "predicted_at": "...", "latency_ms": 24.2}
+ "probability": 0.9377, "model_version": "2.0.0", "predicted_at": "...", "latency_ms": 24.2}
 ```
 
 ## Démarrage rapide

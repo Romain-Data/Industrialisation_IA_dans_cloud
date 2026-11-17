@@ -77,6 +77,15 @@ Nous intégrons les données de l'ERP depuis **MongoDB**, la base analytique, en
 - **Traduire le vocabulaire ERP vers notre contrat** : préserve l'API, mais impose des correspondances arbitraires (`wind`, 4e zone, échelle de capacité) ; écarté.
 - **Deux sources combinées** (historique PostgreSQL + flux MongoDB) : plus de données, mais deux connexions, deux formats et toujours la lecture de la production ; écarté pour l'instant.
 
+## Mise en œuvre (2026-11-17)
+
+- **Lecture** : contrat `OrderRepository` (`src/abstraction/order_repository.py`) et `MongoOrderRepository` : `get`, `get_all`, `get_after` (import incrémental, identifiants ERP de longueur fixe), `ping`, sans `save`. Testé contre un vrai MongoDB 8 alimenté par le simulateur ; un service MongoDB tourne dans la CI.
+- **Vocabulaire** : défini une seule fois dans le domaine (`src/domain/features.py` : `WEATHER_VALUES`, `DELIVERY_ZONE_VALUES`, `CUSTOMER_TYPE_VALUES`), repris par le schéma Pydantic, le contrat `openapi.yml` (version **2.0.0**) et la validation du domaine, qui refuse toute catégorie inconnue. `carrier_capacity` n'est plus borné à 1, seulement positif.
+- **Données synthétiques** : le générateur de dev produit le vocabulaire et l'échelle de l'ERP ; ses coefficients (`wind` 0,15, `suburb` 0,20, `business` +0,15, capacité ramenée sur 50) sont des hypothèses de simulation, à remplacer si l'intervenant fournit une règle d'étiquetage.
+- **Modèles** : chaque run enregistre `data_schema = erp-v1` ; un champion entraîné sur l'ancien vocabulaire est remplacé d'office au premier entraînement (ADR-0002, mise à jour du 2026-11-17).
+- **Données existantes** : les quelques commandes de test enregistrées en preprod avec l'ancien vocabulaire seraient refusées par la validation lors d'un entraînement `TRAINING_SOURCE=ducklake` ; preprod et prod restent en `synthetic`.
+- **Reste à faire** : l'ETL (validation, nettoyage, import horaire), les compose Test et Prod, l'orchestration Prefect, la cible.
+
 ## Links
 
 - Related ADRs : [[ADR-0001 - Stockage commande clients]], [[ADR-0005 - Sécurisation]], [[ADR-0006 - File d'attente]]

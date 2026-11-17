@@ -17,7 +17,7 @@ Contraintes : MacBook Pro M1 en dev, une partie de VPS en prod, et une base SQLi
 
 Nous utilisons MLflow (tracking et Model Registry) comme seul lieu de stockage et de versionnement des modèles. Le backend du registre est SQLite en dev et PostgreSQL en prod, choisi par la variable d'environnement `MLFLOW_TRACKING_URI`. Les fichiers d'artefacts sont stockés sur disque (dossier `mlartifacts/` en dev, disque du VPS en prod), à l'emplacement donné par `MLFLOW_ARTIFACT_ROOT`.
 
-Chaque entraînement enregistre une nouvelle version du modèle `express-delivery` avec ses paramètres, ses métriques et sa liste de variables (`features.json`, journalisé dans le run). L'alias `champion` désigne la version servie : il est déplacé automatiquement vers la nouvelle version uniquement si son `roc_auc` est strictement supérieur à celui du champion actuel (ou s'il n'y a pas encore de champion). Le service charge `models:/express-delivery@champion`. Un rollback consiste à replacer manuellement l'alias sur une version antérieure, sans réentraîner. Les fichiers `joblib`, `metrics.json` et `features.json` écrits à la main dans `artifacts/` sont supprimés.
+Chaque entraînement enregistre une nouvelle version du modèle `express-delivery` avec ses paramètres, ses métriques et sa liste de variables (`features.json`, journalisé dans le run). L'alias `champion` désigne la version servie : il est déplacé automatiquement vers la nouvelle version uniquement si son `roc_auc` est strictement supérieur à celui du champion actuel (ou s'il n'y a pas encore de champion, ou si le champion a été entraîné sur un autre schéma de données : voir la mise à jour du 2026-11-17). Le service charge `models:/express-delivery@champion`. Un rollback consiste à replacer manuellement l'alias sur une version antérieure, sans réentraîner. Les fichiers `joblib`, `metrics.json` et `features.json` écrits à la main dans `artifacts/` sont supprimés.
 
 ### Justification
 
@@ -52,6 +52,17 @@ Chaque entraînement enregistre une nouvelle version du modèle `express-deliver
 - Vérifier la disponibilité du modèle dans la sonde `/health/ready`.
 - Ajouter si nécessaire une condition sur le rappel avant promotion, si le coût des faux négatifs devient un sujet.
 - Tester le registre sur PostgreSQL avant la mise en production.
+
+## Mise à jour (2026-11-17) : schéma des données
+
+Avec l'alignement du vocabulaire sur l'ERP (ADR-0007), un modèle entraîné sur l'ancien vocabulaire (`pluie`, `premium`...) reste techniquement chargeable, mais ne sait pas traiter les nouvelles valeurs : son `OneHotEncoder` les ignore (`handle_unknown="ignore"`) et la prédiction se dégrade **sans erreur**. Comparer son ROC AUC à celui d'un nouveau modèle n'a pas de sens, puisqu'ils ne sont pas évalués sur les mêmes données.
+
+Chaque run enregistre donc le paramètre `data_schema` (`DATA_SCHEMA_VERSION`, défini dans `src/domain/features.py`, actuellement `erp-v1`). La règle de promotion devient :
+
+- pas de champion, ou champion d'un **autre** `data_schema` (ou sans ce paramètre) → le nouveau modèle est promu d'office ;
+- champion du **même** `data_schema` → promotion seulement si le `roc_auc` est strictement supérieur (règle inchangée).
+
+Tout changement futur du vocabulaire ou des variables doit incrémenter `DATA_SCHEMA_VERSION`. Conséquence : un rollback manuel vers une version d'un autre schéma est possible mais à proscrire, l'API refusant désormais l'ancien vocabulaire.
 
 ## Alternatives considered
 

@@ -4,34 +4,19 @@ MongoDB est lu à MONGO_TEST_URI. Sans cette variable, on tente mongodb://localh
 et les tests sont ignorés s'il ne répond pas ; avec la variable (CI), ils échouent.
 """
 
-import importlib.util
 import os
-import sys
 import uuid
-from datetime import UTC, date, datetime
-from pathlib import Path
+from datetime import UTC, datetime
 
 import pytest
 from pymongo import MongoClient
 from pymongo.errors import PyMongoError
 
 from src.infrastructure.mongo_order_repository import MongoOrderRepository
+from tests.erp_simulator import TODAY, load_erp_module
 
-ERP_SOURCES = Path(__file__).parent.parent / "erp_simulator" / "src" / "erp_simulator"
-TODAY = date(2026, 11, 17)
-
-
-def _load_erp_module(name):
-    """Charge un module du simulateur ERP fourni (imports à plat, hors du paquet src)."""
-    spec = importlib.util.spec_from_file_location(f"erp_{name}", ERP_SOURCES / f"{name}.py")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-erp_generator = _load_erp_module("generator")
-erp_storage = _load_erp_module("storage")
+erp_generator = load_erp_module("generator")
+erp_storage = load_erp_module("storage")
 
 
 @pytest.fixture(scope="module")

@@ -17,6 +17,7 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from src.config import RANDOM_STATE, REGISTERED_MODEL_NAME
 from src.domain.features import (
     CATEGORICAL_FEATURES,
+    DATA_SCHEMA_VERSION,
     FEATURE_COLUMNS,
     NUMERIC_FEATURES,
     TARGET_COLUMN,
@@ -113,6 +114,8 @@ def train_model(df, params=None):
         mlflow.log_param("random_state", RANDOM_STATE)
         mlflow.log_param("feature_count", len(FEATURE_COLUMNS))
         mlflow.log_param("training_rows", len(df))
+        # Schéma des données (vocabulaire) : la promotion ne compare que des modèles du même schéma.
+        mlflow.log_param("data_schema", DATA_SCHEMA_VERSION)
         # Provenance des données (ex. numéro de snapshot DuckLake).
         mlflow.log_params(params or {"data_source": "synthetic"})
 

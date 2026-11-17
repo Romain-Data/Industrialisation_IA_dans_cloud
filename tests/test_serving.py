@@ -45,7 +45,7 @@ def test_predict_rejects_missing_feature(valid_order):
 
 
 def test_predict_rejects_out_of_range_value(valid_order):
-    valid_order["carrier_capacity"] = 1.5
+    valid_order["carrier_capacity"] = -1.5
 
     with pytest.raises(ValueError, match="capacité"):
         predict_order_eligibility(valid_order, FakeModel())
