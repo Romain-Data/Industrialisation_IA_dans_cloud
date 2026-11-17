@@ -46,6 +46,11 @@ Ce dossier propose deux implémentations du contrat `OrderRepository` :
 
 ## Démarrer les bases et le simulateur ERP
 
+Le mot de passe de la base PostgreSQL simulée n'est écrit dans aucun fichier du dépôt :
+il est obligatoire et se donne par la variable `ERP_POSTGRES_PASSWORD` (par exemple dans
+un fichier `.env` local, jamais commité). Les identifiants fournis par le cours conviennent
+pour un usage local.
+
 Depuis la racine `correction` :
 
 ```bash
