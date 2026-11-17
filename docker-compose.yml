@@ -13,10 +13,12 @@ x-app: &app
   build: .
   image: express-delivery:local
   environment:
-    DATABASE_URL: postgresql+psycopg://express:${POSTGRES_PASSWORD:-express}@postgres:5432/orders
-    MLFLOW_TRACKING_URI: postgresql+psycopg://express:${POSTGRES_PASSWORD:-express}@postgres:5432/mlflow
+    # Pas d'identifiants dans les URL : libpq (psycopg, extension DuckDB postgres) lit PGPASSWORD.
+    PGPASSWORD: ${POSTGRES_PASSWORD:-express}
+    DATABASE_URL: postgresql+psycopg://express@postgres:5432/orders
+    MLFLOW_TRACKING_URI: postgresql+psycopg://express@postgres:5432/mlflow
     MLFLOW_ARTIFACT_ROOT: file:///app/mlartifacts
-    DUCKLAKE_CATALOG_URL: postgresql+psycopg://express:${POSTGRES_PASSWORD:-express}@postgres:5432/ducklake
+    DUCKLAKE_CATALOG_URL: postgresql+psycopg://express@postgres:5432/ducklake
     TRAINING_SOURCE: ${TRAINING_SOURCE:-synthetic}
   volumes:
     # Volumes partagés entre l'API et l'entraînement, comme les volumes Coolify en prod.
