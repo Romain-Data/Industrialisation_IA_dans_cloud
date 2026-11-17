@@ -1,0 +1,121 @@
+# CI/CD (ADR-0004)
+#   - push / pull request : lint (ruff) + tests (pytest)
+#   - push sur main       : + image linux/amd64 sur GHCR + déploiement preprod
+#   - tag vX.Y.Z          : + image linux/amd64 sur GHCR + déploiement prod
+#
+# Configuration GitHub attendue (Settings > Environments) :
+#   environnements `preprod` et `prod`, chacun avec :
+#     - variable COOLIFY_APP_UUID : UUID de l'application Coolify
+#   secrets du dépôt (ou par environnement) :
+#     - COOLIFY_URL   : ex. https://coolify.example.com (sans / final)
+#     - COOLIFY_TOKEN : token API Coolify (droit write + deploy)
+
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*.*.*"]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  IMAGE_NAME: ghcr.io/${{ github.repository }}
+
+jobs:
+  checks:
+    name: Lint & tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+
+      - name: Installer les dépendances
+        run: uv sync --frozen
+
+      - name: Lint (ruff)
+        run: uv run ruff check . --output-format github
+
+      - name: Tests (pytest)
+        run: uv run pytest -q
+
+  build:
+    name: Image Docker
+    needs: checks
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      sha_tag: ${{ steps.vars.outputs.sha_tag }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Tag SHA
+        id: vars
+        run: echo "sha_tag=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Deux tags (ADR-0004) : le SHA du commit, et la version pour un tag vX.Y.Z.
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ steps.vars.outputs.sha_tag }}
+            type=semver,pattern={{version}}
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Déploiement ${{ startsWith(github.ref, 'refs/tags/v') && 'prod' || 'preprod' }}
+    needs: build
+    runs-on: ubuntu-latest
+    environment: ${{ startsWith(github.ref, 'refs/tags/v') && 'prod' || 'preprod' }}
+    env:
+      COOLIFY_URL: ${{ secrets.COOLIFY_URL }}
+      COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+      APP_UUID: ${{ vars.COOLIFY_APP_UUID }}
+      IMAGE_TAG: ${{ needs.build.outputs.sha_tag }}
+    steps:
+      # Coolify tire l'image publiée sans la reconstruire : on lui indique le tag
+      # exact (SHA) avant de déclencher le déploiement. L'auto-deploy Coolify reste désactivé.
+      - name: Pointer l'application Coolify sur l'image ${{ needs.build.outputs.sha_tag }}
+        run: |
+          curl --fail-with-body -sS -X PATCH \
+            -H "Authorization: Bearer $COOLIFY_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"docker_registry_image_name\": \"${IMAGE_NAME,,}\", \"docker_registry_image_tag\": \"$IMAGE_TAG\"}" \
+            "$COOLIFY_URL/api/v1/applications/$APP_UUID"
+
+      # Coolify vérifie /health/ready et garde l'ancienne version si le démarrage échoue.
+      - name: Déclencher le déploiement
+        run: |
+          curl --fail-with-body -sS -X POST \
+            -H "Authorization: Bearer $COOLIFY_TOKEN" \
+            "$COOLIFY_URL/api/v1/deploy?uuid=$APP_UUID"
