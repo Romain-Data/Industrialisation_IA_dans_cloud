@@ -30,7 +30,7 @@ La stack complète (PostgreSQL + API) se lance avec `docker compose up -d --buil
 | `main` | Versions publiées, uniquement | — | — |
 | `develop` | Intégration ; déployée automatiquement en **preprod** | — | — |
 | `feature/<sujet>` | Nouvelle fonctionnalité ou évolution | `develop` | `develop` |
-| `release/<x.y.z>` | Préparation d'une version (corrections mineures, version, notes) | `develop` | `main` **et** `develop` |
+| `release/<x.y.z>` | *Facultative* : préparer une version sur plusieurs jours sans bloquer `develop` | `develop` | `develop` |
 | `hotfix/<x.y.z>` | Correction urgente de la prod | `main` | `main` **et** `develop` |
 
 Préfixes acceptés pour les branches de travail : `feature/`, `fix/`, `docs/`, `chore/`, `ci/`, `perf/`. Nom court en minuscules, mots séparés par des tirets : `feature/model-card`.
@@ -39,21 +39,20 @@ Règles :
 
 - on ne pousse jamais directement sur `main` ni sur `develop` : tout passe par une pull request ;
 - les fusions se font sans fast-forward (`--no-ff`) pour garder la trace de chaque branche ;
-- la **prod** ne se déploie qu'en publiant une **GitHub Release** `vX.Y.Z` sur `main`.
+- la **prod** ne se déploie qu'en fusionnant `develop` dans `main`, une fois la préprod vérifiée.
 
 ### Publier une version
 
+Chaque fusion sur `develop` est construite **une fois**, déployée en préprod et vérifiée par des tests de fumée : le commit reçoit le statut **« Préprod vérifiée »**. La PR `develop` → `main` ne peut être fusionnée qu'avec ce statut ; la fusion **promeut** les mêmes images en prod (sans reconstruction), crée le tag et la GitHub Release `vX.Y.Z`, déploie et vérifie la santé de la prod.
+
 ```bash
-git switch develop && git pull
-git switch -c release/0.2.0
-# derniers ajustements, puis PR release/0.2.0 -> main
-# après fusion :
-git switch main && git pull
-git tag -a v0.2.0 -m "v0.2.0" && git push origin v0.2.0
-gh release create v0.2.0 --generate-notes      # déclenche la construction et le déploiement prod
-# reporter la release dans develop :
-git switch develop && git merge --no-ff main && git push
+# 1. sur develop (par une PR) : incrémenter la version dans pyproject.toml, ex. 0.3.0
+# 2. attendre « Préprod vérifiée » sur le dernier commit de develop
+gh pr create --base main --head develop --title "Release 0.3.0"
+# 3. relecture et fusion par Romain (merge commit) : la prod se déploie seule
 ```
+
+La CI refuse une PR vers `main` dont la version (`pyproject.toml`) est déjà publiée. Correctif urgent : branche `hotfix/x.y.z` depuis `develop`, puis le même chemin (la prod ne reçoit jamais une image non testée en préprod).
 
 Les versions suivent [SemVer](https://semver.org/lang/fr/) : majeure pour un changement incompatible du contrat d'API, mineure pour une fonctionnalité, correctif sinon.
 
