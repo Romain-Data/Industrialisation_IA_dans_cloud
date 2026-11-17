@@ -4,7 +4,7 @@ services:
     environment:
       POSTGRES_DB: livraison_express
       POSTGRES_USER: livraison
-      POSTGRES_PASSWORD: ${ERP_POSTGRES_PASSWORD:-livraison}
+      POSTGRES_PASSWORD: ${ERP_POSTGRES_PASSWORD:?définir ERP_POSTGRES_PASSWORD (voir README-erp-databases.md)}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
@@ -34,7 +34,7 @@ services:
       dockerfile: Dockerfile.erp-simulator
     environment:
       # Pas de mot de passe dans l'URL : psycopg (libpq) lit PGPASSWORD.
-      PGPASSWORD: ${ERP_POSTGRES_PASSWORD:-livraison}
+      PGPASSWORD: ${ERP_POSTGRES_PASSWORD:?définir ERP_POSTGRES_PASSWORD (voir README-erp-databases.md)}
       POSTGRES_DSN: postgresql://livraison@postgres:5432/livraison_express
       MONGO_URI: mongodb://mongodb:27017
       BATCH_SIZE: ${BATCH_SIZE:-5}
