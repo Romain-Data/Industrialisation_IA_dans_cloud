@@ -35,6 +35,10 @@ class OrderStore(ABC):
         """
 
     @abstractmethod
+    def count_labeled_orders(self) -> int:
+        """Nombre de commandes dont le résultat réel (la cible) est connu."""
+
+    @abstractmethod
     def import_orders(self, orders: list[dict]) -> int:
         """Insère des commandes importées, en ignorant celles déjà présentes (même order_id).
 

@@ -9,7 +9,12 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from src.abstraction.order_store import DuplicateOrderError
-from src.config import DATABASE_URL, MODEL_VERSION, PROJECT_NAME
+from src.config import (
+    DATABASE_URL,
+    MODEL_RELOAD_INTERVAL_SECONDS,
+    MODEL_VERSION,
+    PROJECT_NAME,
+)
 from src.infrastructure.dev.order_queue import InMemoryOrderQueue
 from src.infrastructure.order_store import SqlAlchemyOrderStore
 from src.serving.dependencies import (
@@ -19,7 +24,8 @@ from src.serving.dependencies import (
     get_order_store,
     get_worker,
 )
-from src.serving.model_loader import load_model, load_model_card
+from src.serving.model_loader import champion_version, load_model, load_model_card
+from src.serving.model_reloader import ModelReloader
 from src.serving.schemas import (
     Error,
     HealthStatus,
@@ -247,17 +253,27 @@ def create_app(
     model_loader=load_model,
     order_queue=None,
     model_card_loader=load_model_card,
+    version_reader=champion_version,
+    reload_interval=MODEL_RELOAD_INTERVAL_SECONDS,
 ):
     """Construit l'application ; les dépendances sont injectables pour les tests."""
+
+    def load_champion():
+        """Charge le modèle champion et sa model card (qui décrit toujours la version servie)."""
+        try:
+            model = model_loader()
+        except FileNotFoundError:
+            model = None
+        app.state.model_card = model_card_loader() if model is not None else None
+        app.state.model = model
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        try:
-            app.state.model = model_loader()
-        except FileNotFoundError:
-            app.state.model = None
-
-        # Chargée avec le modèle : elle décrit toujours la version servie.
-        app.state.model_card = model_card_loader() if app.state.model is not None else None
+        version = version_reader()
+        load_champion()
+        # Recharge le champion quand l'orchestrateur en promeut un nouveau (ADR-0009).
+        app.state.reloader = ModelReloader(version_reader, load_champion, reload_interval)
+        app.state.reloader.start(version if app.state.model is not None else None)
 
         app.state.order_store = SqlAlchemyOrderStore(database_url)
         app.state.order_queue = order_queue or InMemoryOrderQueue()
@@ -270,6 +286,7 @@ def create_app(
 
         yield
 
+        app.state.reloader.stop()
         app.state.worker.stop()
 
     app = FastAPI(

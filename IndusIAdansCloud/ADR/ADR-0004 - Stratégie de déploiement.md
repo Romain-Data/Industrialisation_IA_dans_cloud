@@ -23,7 +23,7 @@ Nous déployons par une CI GitHub Actions qui déclenche Coolify uniquement quan
 - **Vérification** : un déploiement est considéré réussi quand `/health/ready` répond après le démarrage ; sinon Coolify garde l'ancienne version en service.
 - **Premier déploiement d'un environnement** : tant qu'aucun modèle `champion` n'existe, `/health/ready` répond 503 et Coolify refuserait la nouvelle version. Le premier déploiement se fait donc avec le health check sur `/health`, puis on lance un entraînement, on passe le health check sur `/health/ready` et on redéploie.
 - **Migrations de base** : exécutées par une commande Alembic (`alembic upgrade head`) avant le démarrage de la nouvelle version, avec des migrations rétrocompatibles d'une version à la suivante.
-- **Rechargement du modèle** : à la fin d'une tâche d'entraînement, si l'alias `champion` a changé, la tâche redémarre l'API de l'environnement concerné pour qu'elle charge le nouveau modèle. Il n'y a pas de rechargement à chaud.
+- **Rechargement du modèle** : ~~à la fin d'une tâche d'entraînement, si l'alias `champion` a changé, la tâche redémarre l'API de l'environnement concerné~~. **Remplacé par l'ADR-0009 (2026-11-17)** : l'API lit la version du champion chaque minute et recharge le modèle quand elle change, sans redémarrage.
 - **Rollback du code** : on redéploie le tag d'image précédent depuis Coolify. Le rollback du modèle reste le déplacement manuel de l'alias `champion` (ADR-0002) et ne nécessite pas de redéploiement.
 - **Secrets** : les secrets de déploiement (URL et jeton de l'API Coolify) sont des secrets GitHub Actions ; les secrets d'exécution restent dans Coolify (ADR-0003). Le jeton est limité au projet Coolify de cette application, avec les seuls droits nécessaires au déploiement (`write` pour fixer le tag d'image, `deploy`).
 - **Accès à l'API Coolify** : l'API accepte les appels de toutes les IP, car les runners GitHub n'ont pas d'adresse fixe. La protection repose sur le jeton.
@@ -92,13 +92,13 @@ Nous déployons par une CI GitHub Actions qui déclenche Coolify uniquement quan
 - **Health check** : exécuté par Coolify avec `curl` dans le conteneur (installé dans l'image), sur `/health/ready`, avec 60 s de délai au démarrage.
 - **Entraînement** : tâche planifiée Coolify `train` (`/app/docker-entrypoint.sh train`) sur l'application preprod, désactivée par défaut et activée à la demande.
 - **Pas encore fait** :
-  - le redémarrage automatique de l'API après un entraînement qui change le `champion` (aujourd'hui, redéploiement manuel) ;
+  - ~~le redémarrage automatique de l'API après un entraînement~~ : rechargement automatique par l'API (ADR-0009) ;
   - le premier déploiement de la prod (première release `v0.1.0`) ;
   - les sauvegardes planifiées des bases et du volume (ADR-0003).
 
 ## Links
 
-- Related ADRs : [[ADR-0002 - Stockage des artefacts de modele]], [[ADR-0003 - Choix de la plateforme de déploiement]], [[ADR-0005 - Sécurisation des entrées, sorties et accès à la donnée]]
+- Related ADRs : [[ADR-0002 - Stockage des artefacts de modele]], [[ADR-0003 - Choix de la plateforme de déploiement]], [[ADR-0005 - Sécurisation des entrées, sorties et accès à la donnée]], [[ADR-0009 - Orchestration du réentraînement]]
 - External references :
   - [Coolify : API](https://coolify.io/docs/api-reference/authorization)
   - [GitHub Actions](https://docs.github.com/actions)

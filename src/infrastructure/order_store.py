@@ -164,6 +164,11 @@ class SqlAlchemyOrderStore(OrderStore):
         orders["order_date"] = pd.to_datetime(orders["order_date"], utc=True).dt.tz_localize(None)
         return orders
 
+    def count_labeled_orders(self):
+        query = select(func.count()).where(OrderRecord.express_eligible.is_not(None))
+        with self._engine.connect() as connection:
+            return connection.execute(query).scalar()
+
     def import_orders(self, orders):
         if not orders:
             return 0
