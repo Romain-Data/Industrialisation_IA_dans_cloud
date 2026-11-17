@@ -1,5 +1,5 @@
 # CI/CD (ADR-0004, GitFlow)
-#   - push / pull request      : ruff + pylint + pytest
+#   - push / pull request      : ruff + pylint + pytest (avec un MongoDB de test)
 #   - push sur develop         : + image (test de démarrage, scan Trivy) sur GHCR + déploiement preprod
 #   - GitHub Release publiée   : + image vX.Y.Z (mêmes contrôles) sur GHCR + déploiement prod
 #   - push sur main            : contrôles uniquement (la prod ne part que d'une release)
@@ -34,6 +34,19 @@ jobs:
   checks:
     name: Lint & tests
     runs-on: ubuntu-latest
+    # MongoDB réel pour tester la lecture des commandes ERP (ADR-0007), même version que l'ERP.
+    services:
+      mongodb:
+        image: mongo:8
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok'"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      MONGO_TEST_URI: mongodb://localhost:27017
     steps:
       - uses: actions/checkout@v7
 
