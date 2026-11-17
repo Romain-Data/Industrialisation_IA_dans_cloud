@@ -110,7 +110,7 @@ Interface MLflow (runs, métriques, versions du modèle) :
 ```bash
 uv run mlflow ui --backend-store-uri sqlite:///mlflow.db
 # avec Docker Compose :
-uv run mlflow ui --backend-store-uri postgresql+psycopg://express:express@localhost:5433/mlflow
+PGPASSWORD=express uv run mlflow ui --backend-store-uri postgresql+psycopg://express@localhost:5433/mlflow
 ```
 
 ## Entraînement du modèle
@@ -142,7 +142,7 @@ Toute la configuration passe par des variables d'environnement ([`src/config.py`
 | `TRAINING_SOURCE` | `synthetic` | Source de l'entraînement (`synthetic` ou `ducklake`) |
 | `PORT` | `8000` | Port de l'API dans le conteneur |
 
-En PostgreSQL, les URL utilisent le driver psycopg 3 : `postgresql+psycopg://utilisateur:mot_de_passe@hôte:5432/base`. Au démarrage, le conteneur crée les bases `mlflow` et `ducklake` si elles n'existent pas, puis applique les migrations.
+En PostgreSQL, les URL utilisent le driver psycopg 3 : `postgresql+psycopg://utilisateur@hôte:5432/base`. Le mot de passe peut être fourni par la variable standard `PGPASSWORD` plutôt que dans l'URL (c'est ce que fait `docker-compose.yml`). Au démarrage, le conteneur crée les bases `mlflow` et `ducklake` si elles n'existent pas, puis applique les migrations.
 
 ## Tests et qualité
 
