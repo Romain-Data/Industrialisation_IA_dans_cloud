@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import mlflow
+import mlflow.sklearn
 from mlflow import MlflowClient
 
 from src.config import (
@@ -13,6 +14,7 @@ from src.config import (
     PROMOTION_METRIC,
     REGISTERED_MODEL_NAME,
 )
+from src.domain.evaluation import evaluate
 from src.domain.features import DATA_SCHEMA_VERSION
 
 
@@ -27,8 +29,12 @@ def configure_mlflow():
     mlflow.set_experiment(MLFLOW_EXPERIMENT)
 
 
-def promote_if_better(run_id):
-    """Déplace l'alias champion sur la version du run si son ROC AUC est meilleur.
+def promote_if_better(run_id, holdout):
+    """Déplace l'alias champion sur la version du run si elle bat le champion.
+
+    Les deux modèles sont notés sur le même jeu d'évaluation (`holdout`, commandes
+    qu'aucun modèle n'a vues à l'entraînement) : comparer le score enregistré du
+    champion, mesuré jadis sur d'autres commandes, ne serait pas équitable.
 
     Retourne True si la version est promue. Elle l'est d'office s'il n'y a pas de
     champion, ou si le champion a été entraîné sur un autre schéma de données
@@ -51,9 +57,14 @@ def promote_if_better(run_id):
 
     if champion is not None:
         champion_run = client.get_run(champion.run_id)
-        same_schema = champion_run.data.params.get("data_schema") == DATA_SCHEMA_VERSION
-        if same_schema and candidate_score <= champion_run.data.metrics[PROMOTION_METRIC]:
-            return False
+        if champion_run.data.params.get("data_schema") == DATA_SCHEMA_VERSION:
+            champion_uri = f"models:/{REGISTERED_MODEL_NAME}/{champion.version}"
+            champion_model = mlflow.sklearn.load_model(champion_uri)
+            champion_score = evaluate(champion_model, holdout)[PROMOTION_METRIC]
+            # Trace de la décision dans le run du candidat.
+            client.log_metric(run_id, f"champion_{PROMOTION_METRIC}", champion_score)
+            if candidate_score <= champion_score:
+                return False
 
     client.set_registered_model_alias(
         REGISTERED_MODEL_NAME, CHAMPION_ALIAS, candidate.version

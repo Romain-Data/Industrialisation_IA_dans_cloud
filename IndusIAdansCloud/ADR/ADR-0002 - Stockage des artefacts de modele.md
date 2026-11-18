@@ -64,6 +64,18 @@ Chaque run enregistre donc le paramètre `data_schema` (`DATA_SCHEMA_VERSION`, d
 
 Tout changement futur du vocabulaire ou des variables doit incrémenter `DATA_SCHEMA_VERSION`. Conséquence : un rollback manuel vers une version d'un autre schéma est possible mais à proscrire, l'API refusant désormais l'ancien vocabulaire.
 
+## Mise à jour (2026-11-18) : champion et candidat notés sur le même jeu d'évaluation
+
+Avec le réentraînement automatique en prod (toutes les `RETRAIN_MIN_NEW_ORDERS` commandes, ADR-0009), la promotion décide seule du modèle servi. Or la règle comparait le `roc_auc` du candidat, mesuré sur son jeu de test, au `roc_auc` **enregistré** du champion, mesuré lors de son propre entraînement sur d'autres commandes. Le découpage aléatoire (`train_test_split`) changeait aussi à chaque fois : le champion avait pu s'entraîner sur des commandes du jeu de test du candidat. La comparaison n'était donc pas équitable.
+
+Nouvelle règle (`src/domain/evaluation.py`) :
+
+- **Jeu d'évaluation stable** : une commande est réservée à l'évaluation si l'empreinte SHA-256 de son `order_id` tombe dans les 20 % fixés. Une commande d'évaluation le reste à chaque réentraînement : aucun modèle ne l'a vue à l'entraînement. Les nouvelles commandes y entrent dans la même proportion : le jeu suit les données récentes.
+- **Réévaluation du champion** : avant de déplacer l'alias, le champion est rechargé et noté sur ce même jeu ; le candidat n'est promu que si son `roc_auc` est strictement supérieur. Le score du champion est enregistré dans le run du candidat (`champion_roc_auc`) : la décision est traçable.
+- Chaque run enregistre `evaluation_protocol` (`sha256-order_id-20pct`) et `holdout_rows`.
+
+Transition : les champions entraînés avant ce changement ont pu voir une partie du nouveau jeu d'évaluation ; ils sont donc avantagés, ce qui rend la promotion plus prudente, jamais plus laxiste.
+
 ## Alternatives considered
 
 - **Dossiers versionnés à la main (`artifacts/v1.0.0/` + lien `current`)** : sans dépendance, mais l'historique des métriques, l'alias et la traçabilité seraient à coder et à maintenir ; MLflow les fournit déjà.
@@ -75,6 +87,6 @@ Tout changement futur du vocabulaire ou des variables doit incrémenter `DATA_SC
 ## Links
 
 - Related ADRs : [[ADR-0001 - Stockage des commandes]]
-- Code : `src/training/registry.py`, `src/training/train.py`, `src/serving/model_loader.py`
+- Code : `src/training/registry.py`, `src/training/train.py`, `src/domain/evaluation.py`, `src/serving/model_loader.py`
 - External references :
   - [MLflow Model Registry](https://mlflow.org/docs/latest/ml/model-registry/)

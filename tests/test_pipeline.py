@@ -3,6 +3,8 @@ from mlflow import MlflowClient
 
 from src.abstraction.collect import Collect
 from src.config import CHAMPION_ALIAS, REGISTERED_MODEL_NAME
+from src.domain.evaluation import EVALUATION_PROTOCOL
+from src.domain.features import TARGET_COLUMN
 from src.infrastructure.dev.collect import CollectDev
 from src.serving.model_loader import load_model, load_model_card
 from src.training.pipeline import run_training
@@ -63,3 +65,38 @@ def test_model_card_reflects_the_champion(tmp_path, monkeypatch):
     assert "distance_km" in card["features"]
     assert card["trained_at"] is not None
     assert "Le jeu de données utilisé est synthétique." in card["limitations"]
+
+
+class ShuffledLabelsCollect(Collect):
+    """Mêmes commandes, étiquettes mélangées : le modèle obtenu ne vaut rien."""
+
+    def collect_data(self):
+        df = CollectDev().collect_data(n_rows=500)
+        df[TARGET_COLUMN] = df[TARGET_COLUMN].sample(frac=1, random_state=0).to_numpy()
+        return df
+
+
+def test_champion_is_rescored_on_the_same_holdout(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    # Champion médiocre dont le score enregistré (0.99) est flatteur : mesuré jadis,
+    # sur d'autres commandes. Ce chiffre ne doit pas compter dans la décision.
+    _, _, weak_run = run_training(ShuffledLabelsCollect())
+    client = MlflowClient()  # après l'entraînement, qui pointe MLflow sur le registre du test
+    client.log_metric(weak_run, "roc_auc", 0.99)
+
+    _, metrics, good_run = run_training(SmallCollect())
+
+    champion = client.get_model_version_by_alias(REGISTERED_MODEL_NAME, CHAMPION_ALIAS)
+    assert champion.run_id == good_run
+    champion_score = client.get_run(good_run).data.metrics["champion_roc_auc"]
+    assert champion_score < metrics["roc_auc"]
+
+
+def test_run_records_the_evaluation_protocol(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _, _, run_id = run_training(SmallCollect())
+
+    params = MlflowClient().get_run(run_id).data.params
+    assert params["evaluation_protocol"] == EVALUATION_PROTOCOL
+    assert 0 < int(params["holdout_rows"]) < int(params["training_rows"])
