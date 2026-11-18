@@ -5,18 +5,11 @@ import mlflow.sklearn
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import (
-    accuracy_score,
-    f1_score,
-    precision_score,
-    recall_score,
-    roc_auc_score,
-)
-from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 from src.config import RANDOM_STATE, REGISTERED_MODEL_NAME
+from src.domain.evaluation import EVALUATION_PROTOCOL, evaluate
 from src.domain.features import (
     CATEGORICAL_FEATURES,
     DATA_SCHEMA_VERSION,
@@ -27,22 +20,16 @@ from src.domain.features import (
 from src.training.registry import configure_mlflow
 
 
-def train_model(df, params=None):
-    """Entraîne le pipeline, l'évalue sur 20 % des données et l'enregistre dans MLflow.
+def train_model(train, holdout, params=None):
+    """Entraîne le pipeline, l'évalue sur le jeu d'évaluation commun et l'enregistre dans MLflow.
 
+    `train` et `holdout` viennent de `split_holdout` (src/domain/evaluation.py) : le
+    champion sera réévalué sur ce même `holdout` avant toute promotion.
     Retourne (pipeline, métriques, run_id). `params` complète les paramètres du run
     (provenance des données, numéro de snapshot DuckLake...).
     """
-    X = df[FEATURE_COLUMNS]
-    y = df[TARGET_COLUMN]
-
-    X_train, X_test, y_train, y_test = train_test_split(
-        X,
-        y,
-        test_size=0.20,
-        random_state=RANDOM_STATE,
-        stratify=y
-    )
+    X_train = train[FEATURE_COLUMNS]
+    y_train = train[TARGET_COLUMN]
 
     numeric_transformer = Pipeline(
         steps=[
@@ -106,21 +93,15 @@ def train_model(df, params=None):
     with mlflow.start_run(run_name="logistic-regression-baseline") as run:
         model_pipeline.fit(X_train, y_train)
 
-        y_pred = model_pipeline.predict(X_test)
-        y_proba = model_pipeline.predict_proba(X_test)[:, 1]
-
-        metrics = {
-            "accuracy": accuracy_score(y_test, y_pred),
-            "precision": precision_score(y_test, y_pred, zero_division=0),
-            "recall": recall_score(y_test, y_pred, zero_division=0),
-            "f1_score": f1_score(y_test, y_pred, zero_division=0),
-            "roc_auc": roc_auc_score(y_test, y_proba),
-        }
+        metrics = evaluate(model_pipeline, holdout)
 
         mlflow.log_param("model_type", "LogisticRegression")
         mlflow.log_param("random_state", RANDOM_STATE)
         mlflow.log_param("feature_count", len(FEATURE_COLUMNS))
-        mlflow.log_param("training_rows", len(df))
+        # training_rows : toutes les commandes lues (le réentraînement compte les nouvelles).
+        mlflow.log_param("training_rows", len(train) + len(holdout))
+        mlflow.log_param("holdout_rows", len(holdout))
+        mlflow.log_param("evaluation_protocol", EVALUATION_PROTOCOL)
         # Schéma des données (vocabulaire) : la promotion ne compare que des modèles du même schéma.
         mlflow.log_param("data_schema", DATA_SCHEMA_VERSION)
         # Provenance des données (ex. numéro de snapshot DuckLake).

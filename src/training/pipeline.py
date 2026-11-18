@@ -9,6 +9,7 @@ from src.config import (
     TRAINING_SOURCE,
 )
 from src.domain.cleaning import clean_orders_data
+from src.domain.evaluation import split_holdout
 from src.domain.validation import validate_columns, validate_dataset
 from src.training.registry import promote_if_better
 from src.training.train import train_model
@@ -30,8 +31,10 @@ def run_training(collector: Collect):
         print(f"Nettoyage : {dropped} lignes écartées sur {len(raw_orders)}.")
 
     params = {**(getattr(collector, "tracking_params", None) or {}), "rows_dropped": dropped}
-    model_pipeline, metrics, run_id = train_model(orders_clean, params=params)
-    promoted = promote_if_better(run_id)
+    # Même jeu d'évaluation pour le candidat et le champion (src/domain/evaluation.py).
+    train, holdout = split_holdout(orders_clean)
+    model_pipeline, metrics, run_id = train_model(train, holdout, params=params)
+    promoted = promote_if_better(run_id, holdout)
 
     print("Entraînement terminé.")
     print(f"Run MLflow : {run_id}")
