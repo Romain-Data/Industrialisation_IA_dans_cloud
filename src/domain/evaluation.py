@@ -67,3 +67,66 @@ def evaluate(model, holdout: pd.DataFrame):
         "f1_score": f1_score(y_true, y_pred, zero_division=0),
         "roc_auc": roc_auc_score(y_true, y_proba),
     }
+
+
+# --- Garde-fous métier (ADR-0010) -------------------------------------------------
+# Seuils fixés par le métier, pas par l'équipe data : les modifier demande une mise à
+# jour de l'ADR-0010. Un candidat meilleur en ROC AUC qui en viole un n'est pas promu
+# automatiquement : il devient « challenger » et un humain tranche.
+
+# Part minimale des « oui » réellement faisables : au moins 85 % des livraisons express
+# promises doivent pouvoir être tenues.
+MIN_PRECISION = 0.85
+# Baisse maximale du ROC AUC sur un segment (zone, météo) par rapport au champion :
+# un gain global ne doit pas cacher une dégradation pour une partie des clients.
+MAX_SEGMENT_AUC_DROP = 0.05
+SEGMENT_COLUMNS = ("delivery_zone", "weather")
+# En dessous, le ROC AUC d'un segment est trop bruité pour être comparé.
+MIN_SEGMENT_ROWS = 50
+# Écart maximal de la part de commandes déclarées éligibles : un basculement brutal
+# désorganiserait la logistique (préparateurs, transporteurs).
+MAX_POSITIVE_RATE_SHIFT = 0.05
+
+
+def _positive_rate(model, holdout):
+    return float((model.predict_proba(holdout[FEATURE_COLUMNS])[:, 1] >= 0.5).mean())
+
+
+def _segment_auc(model, holdout, column):
+    """ROC AUC par valeur de `column`, pour les segments assez grands et avec deux classes."""
+    scores = {}
+    for value, segment in holdout.groupby(column):
+        if len(segment) >= MIN_SEGMENT_ROWS and segment[TARGET_COLUMN].nunique() == 2:
+            proba = model.predict_proba(segment[FEATURE_COLUMNS])[:, 1]
+            scores[value] = roc_auc_score(segment[TARGET_COLUMN], proba)
+    return scores
+
+
+def guardrail_failures(candidate, champion, holdout):
+    """Garde-fous métier violés par le candidat ; liste vide si tout passe.
+
+    Sans champion comparable (`champion` à None), seul le seuil absolu de précision
+    s'applique.
+    """
+    failures = []
+
+    precision = evaluate(candidate, holdout)["precision"]
+    if precision < MIN_PRECISION:
+        failures.append(f"précision {precision:.3f} < {MIN_PRECISION}")
+
+    if champion is None:
+        return failures
+
+    for column in SEGMENT_COLUMNS:
+        champion_scores = _segment_auc(champion, holdout, column)
+        for value, score in _segment_auc(candidate, holdout, column).items():
+            if value in champion_scores and champion_scores[value] - score > MAX_SEGMENT_AUC_DROP:
+                failures.append(
+                    f"{column}={value} : ROC AUC {score:.3f} contre {champion_scores[value]:.3f}"
+                )
+
+    shift = _positive_rate(candidate, holdout) - _positive_rate(champion, holdout)
+    if abs(shift) > MAX_POSITIVE_RATE_SHIFT:
+        failures.append(f"part d'éligibles décalée de {shift:+.1%}")
+
+    return failures

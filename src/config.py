@@ -39,6 +39,8 @@ MLFLOW_ARTIFACT_ROOT = os.getenv("MLFLOW_ARTIFACT_ROOT")
 MLFLOW_EXPERIMENT = "livraison-express"
 REGISTERED_MODEL_NAME = "express-delivery"
 CHAMPION_ALIAS = "champion"
+# Candidat meilleur en ROC AUC mais qui viole un garde-fou métier : un humain tranche (ADR-0010).
+CHALLENGER_ALIAS = "challenger"
 # Intervalle de vérification du champion par l'API (0 = pas de rechargement automatique).
 MODEL_RELOAD_INTERVAL_SECONDS = int(os.getenv("MODEL_RELOAD_INTERVAL_SECONDS", "60"))
 PROMOTION_METRIC = "roc_auc"

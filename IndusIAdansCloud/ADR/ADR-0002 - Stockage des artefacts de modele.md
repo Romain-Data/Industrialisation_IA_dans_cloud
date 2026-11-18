@@ -74,6 +74,8 @@ Nouvelle règle (`src/domain/evaluation.py`) :
 - **Réévaluation du champion** : avant de déplacer l'alias, le champion est rechargé et noté sur ce même jeu ; le candidat n'est promu que si son `roc_auc` est strictement supérieur. Le score du champion est enregistré dans le run du candidat (`champion_roc_auc`) : la décision est traçable.
 - Chaque run enregistre `evaluation_protocol` (`sha256-order_id-20pct`) et `holdout_rows`.
 
+Un candidat meilleur doit encore respecter des garde-fous métier (précision, segments, part d'éligibles) ; sinon il reçoit l'alias `challenger` et un humain tranche : voir [[ADR-0010 - Garde-fous métier et contrôle humain de la promotion]].
+
 Transition : les champions entraînés avant ce changement ont pu voir une partie du nouveau jeu d'évaluation ; ils sont donc avantagés, ce qui rend la promotion plus prudente, jamais plus laxiste.
 
 ## Alternatives considered
@@ -86,7 +88,7 @@ Transition : les champions entraînés avant ce changement ont pu voir une parti
 
 ## Links
 
-- Related ADRs : [[ADR-0001 - Stockage des commandes]]
+- Related ADRs : [[ADR-0001 - Stockage des commandes]], [[ADR-0010 - Garde-fous métier et contrôle humain de la promotion]]
 - Code : `src/training/registry.py`, `src/training/train.py`, `src/domain/evaluation.py`, `src/serving/model_loader.py`
 - External references :
   - [MLflow Model Registry](https://mlflow.org/docs/latest/ml/model-registry/)
