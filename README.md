@@ -154,6 +154,13 @@ Chaque commande est nettoyée puis validée ; les commandes invalides sont rejet
 
 Le flow `erp-pipeline` ([ADR-0009](IndusIAdansCloud/ADR/ADR-0009%20-%20Orchestration%20du%20r%C3%A9entra%C3%AEnement.md)) tourne toutes les heures : import ERP, puis réentraînement si au moins `RETRAIN_MIN_NEW_ORDERS` nouvelles commandes étiquetées sont arrivées. L'API recharge d'elle-même un nouveau champion (vérification chaque minute), sans redémarrage.
 
+Promotion d'un nouveau modèle ([ADR-0010](IndusIAdansCloud/ADR/ADR-0010%20-%20Garde-fous%20m%C3%A9tier%20et%20contr%C3%B4le%20humain%20de%20la%20promotion.md)) : le candidat et le champion sont notés sur le même jeu d'évaluation. Un candidat meilleur devient champion s'il respecte les garde-fous métier (précision ≥ 0,85, aucun segment dégradé, part d'éligibles stable) ; sinon il reçoit l'alias `challenger` et attend une décision humaine :
+
+```bash
+python -m src.training.promote               # valider le challenger
+python -m src.training.promote --version 3   # rollback vers la version 3
+```
+
 ```bash
 uv run prefect server start                                   # interface sur http://127.0.0.1:4200
 PREFECT_API_URL=http://127.0.0.1:4200/api uv run python -m src.orchestration.serve
@@ -235,6 +242,7 @@ Les choix structurants sont documentés sous forme d'ADR dans [`IndusIAdansCloud
 | ADR-0007 : Sécuriser les entrées, sorties et l'accès à la donnée | [ADR-0005](IndusIAdansCloud/ADR/ADR-0005%20-%20S%C3%A9curisation%20des%20entr%C3%A9es%2C%20sorties%20et%20acc%C3%A8s%20%C3%A0%20la%20donn%C3%A9e.md) | secrets, image, CI, dépôt, limites connues |
 | *(hors barème)* | [ADR-0009](IndusIAdansCloud/ADR/ADR-0009%20-%20Orchestration%20du%20r%C3%A9entra%C3%AEnement.md) | orchestration Prefect : import ERP horaire, réentraînement, rechargement du modèle |
 | *(hors barème)* | [ADR-0006](IndusIAdansCloud/ADR/ADR-0006%20-%20File%20d'attente.md) | file d'attente des commandes (en mémoire, worker) |
+| *(hors barème)* | [ADR-0010](IndusIAdansCloud/ADR/ADR-0010%20-%20Garde-fous%20m%C3%A9tier%20et%20contr%C3%B4le%20humain%20de%20la%20promotion.md) | garde-fous métier, alias `challenger`, décision humaine, mode shadow (non retenu) |
 
 ## Contribuer
 

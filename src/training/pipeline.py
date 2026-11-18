@@ -34,11 +34,15 @@ def run_training(collector: Collect):
     # Même jeu d'évaluation pour le candidat et le champion (src/domain/evaluation.py).
     train, holdout = split_holdout(orders_clean)
     model_pipeline, metrics, run_id = train_model(train, holdout, params=params)
-    promoted = promote_if_better(run_id, holdout)
+    decision = promote_if_better(run_id, holdout)
 
     print("Entraînement terminé.")
     print(f"Run MLflow : {run_id}")
-    print(f"Alias {CHAMPION_ALIAS} {'déplacé' if promoted else 'inchangé'}")
+    print(f"Décision de promotion : {decision}" + {
+        "champion": f" (alias {CHAMPION_ALIAS} déplacé)",
+        "challenger": " (garde-fou métier violé : décision humaine attendue, ADR-0010)",
+        "rejected": f" (pas meilleur que le {CHAMPION_ALIAS})",
+    }[decision])
     print(f"Métriques : {metrics}")
 
     return model_pipeline, metrics, run_id

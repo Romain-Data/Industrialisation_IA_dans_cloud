@@ -1,7 +1,13 @@
+import numpy as np
 import pandas as pd
 import pytest
 
-from src.domain.evaluation import HOLDOUT_PERCENT, is_holdout, split_holdout
+from src.domain.evaluation import (
+    HOLDOUT_PERCENT,
+    guardrail_failures,
+    is_holdout,
+    split_holdout,
+)
 from src.infrastructure.dev.collect import CollectDev
 
 
@@ -39,3 +45,56 @@ def test_split_rejects_a_single_class():
     df["express_eligible"] = 1
     with pytest.raises(ValueError, match="deux classes"):
         split_holdout(pd.DataFrame(df))
+
+
+class RuleModel:
+    """Modèle factice : probabilité calculée par une fonction des commandes."""
+
+    def __init__(self, rule):
+        self.rule = rule
+
+    def predict_proba(self, data):
+        proba = np.asarray(self.rule(data), dtype=float)
+        return np.column_stack([1 - proba, proba])
+
+
+@pytest.fixture
+def holdout():
+    """Commandes d'évaluation dont l'étiquette est connue du « bon » modèle."""
+    df = CollectDev().collect_data(n_rows=3000)
+    return split_holdout(df)[1]
+
+
+def perfect(data, holdout):
+    return holdout.loc[data.index, "express_eligible"] * 0.8 + 0.1
+
+
+def test_good_candidate_passes_all_guardrails(holdout):
+    model = RuleModel(lambda data: perfect(data, holdout))
+    assert guardrail_failures(model, model, holdout) == []
+
+
+def test_precision_floor(holdout):
+    always_yes = RuleModel(lambda data: np.full(len(data), 0.9))
+    failures = guardrail_failures(always_yes, None, holdout)
+    assert any("précision" in failure for failure in failures)
+
+
+def test_degraded_segment_is_caught(holdout):
+    champion = RuleModel(lambda data: perfect(data, holdout))
+    # Parfait partout, sauf en zone rurale où il répond au hasard.
+    candidate = RuleModel(lambda data: np.where(
+        data["delivery_zone"] == "rural",
+        np.random.default_rng(0).uniform(size=len(data)),
+        perfect(data, holdout),
+    ))
+    failures = guardrail_failures(candidate, champion, holdout)
+    assert any("delivery_zone=rural" in failure for failure in failures)
+
+
+def test_positive_rate_shift_is_caught(holdout):
+    champion = RuleModel(lambda data: perfect(data, holdout))
+    # Même classement, mais seuil décalé : bien plus de commandes déclarées éligibles.
+    candidate = RuleModel(lambda data: np.clip(perfect(data, holdout) + 0.45, 0, 1))
+    failures = guardrail_failures(candidate, champion, holdout)
+    assert any("part d'éligibles" in failure for failure in failures)
