@@ -71,6 +71,26 @@ Nous orchestrons l'import ERP et le réentraînement avec **Prefect 3.9.3**, aut
 - **Redémarrer l'API après une promotion** (ADR-0004) : demande un jeton Coolify ou le socket Docker, et coupe le service ; remplacé par le rechargement.
 - **Endpoint de rechargement appelé par l'orchestrateur** : immédiat, mais il faudrait le sécuriser (l'API n'a pas d'authentification, ADR-0005) ; écarté au profit de la lecture périodique.
 
+## Mise en œuvre (2026-11-20) : Prefect en prod seulement
+
+La prod est l'environnement le plus complet ; la préprod garde la tâche planifiée Coolify `train` (lancée à la main) pour économiser la mémoire du VPS partagé. Ressources de l'environnement Coolify `production` :
+
+| Ressource | Rôle | Limites |
+|---|---|---|
+| `prefect-server-prod` | serveur Prefect (API, interface, planificateur), image officielle 3.9.3 via un Dockerfile d'une ligne (`prefect server start`), historique sur un volume | 512 Mo, 0,5 CPU |
+| `orchestrator-prod` | `serve()` du flow `erp-pipeline` (image `-orchestrator`, même version que l'API) | 1,5 Go, 1 CPU |
+| `erp-mongodb-prod` | MongoDB de l'ERP simulé, lu par l'ETL ; non public | 512 Mo |
+| `erp-pg-prod` | PostgreSQL de l'ERP simulé (écrit par le simulateur, jamais lu par nous) ; non public | 256 Mo |
+| `erp-simulator-prod` | simulateur du cours (`erp_simulator/`) : 1 000 commandes d'historique au premier démarrage, puis 5 commandes par minute | 128 Mo |
+
+- **Volumes partagés** : l'orchestrateur monte les **dossiers des volumes de l'API** (`/app/mlartifacts`, `/app/ducklake`). Le modèle qu'il entraîne est ainsi lisible par l'API, qui le recharge dans la minute.
+- **Réseau** : tout est sur le réseau interne de Coolify. L'orchestrateur joint le serveur par son alias `prefect-server-prod`, et les bases par leur identifiant.
+- **Accès à l'interface** : le port 4200 est publié uniquement sur `127.0.0.1` du VPS, fermé depuis l'IP publique (vérifié). On y accède par tunnel SSH : `ssh -N -L 4200:127.0.0.1:4200 NetCup`, puis http://localhost:4200.
+- **Simulateur** : l'historique n'est généré qu'au premier démarrage (`RECENT_HISTORY_ORDERS=1000`, puis `0`). L'historique ancien, qui n'irait que dans le PostgreSQL de l'ERP, est désactivé (`POSTGRES_HISTORY_ORDERS=0`). Le flux reprend après la dernière commande à chaque redémarrage. `INTERVAL_SECONDS=60` limite le volume produit s'il reste allumé.
+- **CI/CD** : le job `deploy-prod` déploie aussi l'orchestrateur, avec la même version, une fois l'API vérifiée (variable `COOLIFY_ORCHESTRATOR_UUID` de l'environnement GitHub `prod`).
+- **Allumage et extinction** : `scripts/coolify_power.py on|off|status` gère toutes ces ressources dans l'ordre des dépendances.
+- **Vérification (20/11)** : un run `reentrainement-force` s'est terminé avec succès (import de 1 035 commandes étiquetées, décision, entraînement). Les artefacts ont été écrits dans le volume de l'API. Le candidat (ROC AUC 0,888, précision 0,687 < 0,85) n'a pas remplacé le champion, comme le prévoit le garde-fou de l'ADR-0010.
+
 ## Links
 
 - Related ADRs : [[ADR-0002 - Stockage des artefacts de modele]], [[ADR-0004 - Stratégie de déploiement]], [[ADR-0007 - PostgreSQL, MongoDB ou autre]]

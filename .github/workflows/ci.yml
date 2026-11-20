@@ -284,3 +284,9 @@ jobs:
 
       - name: Check de santé en prod (lecture seule)
         run: python3 scripts/smoke_test.py "${{ vars.APP_URL }}" --mode readonly
+
+      # Orchestrateur Prefect (prod uniquement, ADR-0009) : même version que l'API, déployé
+      # une fois l'API vérifiée. Pas de health check HTTP : « finished » = conteneur démarré.
+      - name: Déployer l'orchestrateur Prefect
+        if: vars.COOLIFY_ORCHESTRATOR_UUID != ''
+        run: python3 scripts/coolify_deploy.py "${{ vars.COOLIFY_ORCHESTRATOR_UUID }}" "$IMAGE_NAME-orchestrator" "${{ needs.promote.outputs.version }}"
