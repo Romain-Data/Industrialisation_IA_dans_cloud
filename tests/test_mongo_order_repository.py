@@ -151,6 +151,10 @@ def test_new_erp_orders_are_picked_up_after_the_last_one(erp):
     assert [order.order_id for order, _ in batch] == ["ERP-00000041", "ERP-00000042", "ERP-00000043"]
 
 
+def test_latest_order_id_is_the_greatest_identifier(erp):
+    assert erp["repository"].latest_order_id() == "ERP-00000040"
+
+
 def test_incomplete_document_is_left_to_the_etl(erp):
     erp["collection"].update_one({"order_id": "ERP-00000002"}, {"$unset": {"weather": ""}})
 

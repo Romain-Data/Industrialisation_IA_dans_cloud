@@ -20,7 +20,7 @@ info:
     Version 2.1.0 (séance 6, ADR-0013) : flux temps réel pour le logisticien, ajouts
     compatibles avec 2.0.0 : historique des prédictions (`GET /v1/predictions`), flux
     Server-Sent Events (`GET /v1/events/predictions`, événement `PredictionEvent`) et
-    commandes de démonstration (`POST /v1/demo/orders`, activé par `DEMO_MODE`).
+    flux temps réel des commandes de l'ERP piloté par le logisticien (`/v1/erp-stream`).
   license:
     name: Usage pédagogique
 servers:
@@ -38,8 +38,8 @@ tags:
     description: Métadonnées du modèle en service (séance 3)
   - name: metrics
     description: Métriques d'observabilité (séance 7)
-  - name: demo
-    description: Démonstration du flux temps réel, hors cas métier (séance 6)
+  - name: erp
+    description: Flux temps réel des commandes de l'ERP, piloté par le logisticien (séance 6)
 
 paths:
   /health:
@@ -321,43 +321,50 @@ paths:
               schema:
                 type: string
 
-  /v1/demo/orders:
-    post:
-      tags: [demo]
-      operationId: createDemoOrders
-      summary: Générer des commandes de démonstration
+  /v1/erp-stream:
+    get:
+      tags: [erp]
+      operationId: getErpStream
+      summary: État du flux temps réel des commandes de l'ERP
+      x-session: 6
+      responses:
+        "200":
+          description: État du flux
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErpStreamStatus"
+    put:
+      tags: [erp]
+      operationId: updateErpStream
+      summary: Activer ou couper le flux temps réel de l'ERP
       description: |
-        Hors cas métier, pour la formation : génère des commandes réalistes (préfixe `DEMO-`)
-        qui suivent le parcours d'une vraie commande (file, worker, flux temps réel).
-        Activé par `DEMO_MODE`, un appel toutes les 5 s au plus.
+        Le logisticien prend son poste (`active: true`) : les commandes arrivées dans l'ERP
+        **depuis l'activation** sont importées au fil de l'eau et suivent le parcours d'une
+        commande reçue (file, prédiction, notification). `active: false` coupe le flux ; les
+        commandes suivantes arrivent par l'import horaire, sans notification.
       x-session: 6
       requestBody:
-        required: false
+        required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/DemoOrdersRequest"
+              $ref: "#/components/schemas/ErpStreamUpdate"
       responses:
-        "202":
-          description: Commandes enregistrées ; leurs prédictions arriveront par le flux
+        "200":
+          description: Nouvel état du flux
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/DemoOrdersAccepted"
-        "404":
-          description: Mode démonstration désactivé
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
+                $ref: "#/components/schemas/ErpStreamStatus"
         "422":
           description: Demande invalide
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-        "429":
-          description: Générations trop rapprochées
+        "503":
+          description: ERP injoignable, flux non activé
           content:
             application/json:
               schema:
@@ -692,28 +699,32 @@ components:
           description: Version du schéma, pour pouvoir faire évoluer le contrat
           example: 1
 
-    DemoOrdersRequest:
+    ErpStreamUpdate:
       type: object
       additionalProperties: false
+      required: [active]
       properties:
-        count:
-          type: integer
-          minimum: 1
-          maximum: 20
-          default: 5
+        active:
+          type: boolean
+          description: "true : prendre son poste ; false : couper le flux"
 
-    DemoOrdersAccepted:
+    ErpStreamStatus:
       type: object
-      required: [order_ids, count]
+      required: [active, received]
       properties:
-        order_ids:
-          type: array
-          items:
-            type: string
-          example: [DEMO-1a2b3c4d]
-        count:
+        active:
+          type: boolean
+        since:
+          type: string
+          format: date-time
+          description: Dernière activation
+        last_order_id:
+          type: string
+          description: Dernière commande ERP lue
+          example: ERP-00001234
+        received:
           type: integer
-          example: 5
+          description: Commandes reçues depuis la dernière activation
 
     HealthStatus:
       type: object

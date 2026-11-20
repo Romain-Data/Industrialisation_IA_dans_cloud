@@ -43,16 +43,13 @@ def import_erp_orders(
         valid = []
         for order, label in batch:
             report.read += 1
-            order = clean_order(order)
-            errors = order_errors(order)
-            if label not in (0, 1, None):
-                errors.append(f"express_eligible invalide ({label!r})")
-            if errors:
+            row, errors = validated_row(order, label)
+            if row is None:
                 _reject(report, order.order_id, errors)
                 continue
             if label is None:
                 report.unlabeled += 1
-            valid.append(_to_row(order, label))
+            valid.append(row)
 
         inserted = store.import_orders(valid)
         report.imported += inserted
@@ -79,6 +76,19 @@ def _reject(report: ImportReport, order_id: str | None, errors: Iterable[str]) -
     report.rejection_reasons.update(error.split(" (")[0] for error in errors)
     if report.rejected <= MAX_LOGGED_REJECTIONS:
         logger.warning("Commande %s rejetée : %s", order_id, "; ".join(errors))
+
+
+def validated_row(order: OrderEntity, label: int | None) -> tuple[dict[str, object] | None, list[str]]:
+    """Nettoie et valide une commande ERP ; retourne (ligne à importer, None) ou (None, motifs).
+
+    Utilisé par l'import horaire et par le flux temps réel du logisticien (ADR-0013) : une
+    commande est importée de la même façon par les deux chemins.
+    """
+    order = clean_order(order)
+    errors = order_errors(order)
+    if label not in (0, 1, None):
+        errors.append(f"express_eligible invalide ({label!r})")
+    return (None, errors) if errors else (_to_row(order, label), [])
 
 
 def _to_row(order: OrderEntity, label: int | None) -> dict[str, object]:

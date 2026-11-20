@@ -58,11 +58,11 @@ Flux d'une commande :
 [`/logisticien`](https://express-delivery.romaincollery.com/logisticien) affiche chaque prédiction dès qu'elle est calculée. Les commandes **éligibles à l'express** sont mises en évidence et notifiées (bannière, et notification du navigateur si on l'autorise). Le parcours ([ADR-0013](IndusIAdansCloud/ADR/ADR-0013%20-%20RabbitMQ%20et%20interface%20temps%20r%C3%A9el%20du%20logisticien.md)) :
 
 ```text
-POST /v1/orders ─▶ PostgreSQL ─▶ RabbitMQ (file orders) ─▶ worker : prédiction
+ERP (MongoDB) ─flux─▶ PostgreSQL ─▶ RabbitMQ (file orders) ─▶ worker : prédiction
    worker ─▶ RabbitMQ (échange predictions) ─▶ API ─SSE─▶ navigateur du logisticien
 ```
 
-Pour la démonstration, le bouton **Générer 5 commandes** (`DEMO_MODE=true`) crée des commandes fictives (`DEMO-…`) qui suivent exactement ce parcours. Sans `RABBITMQ_URL` (développement, tests), la file et la diffusion restent en mémoire.
+Le logisticien **prend son poste en activant le flux** (`PUT /v1/erp-stream`) : les commandes arrivées dans l'ERP depuis l'activation sont importées toutes les 2 s et suivent ce parcours. La page n'affiche que les **nouvelles commandes express** (bouton « Traitée », case « Afficher aussi les commandes standard », bouton « Vider la liste ») et compte les commandes reçues depuis l'activation. Sans ERP joignable (préprod), l'activation est refusée. Sans `RABBITMQ_URL` (développement, tests), la file et la diffusion restent en mémoire.
 
 ## API
 
@@ -79,7 +79,7 @@ Le contrat de l'API est [`openapi.yml`](openapi.yml) ; les tests vérifient que 
 | `GET` | `/v1/predictions/{order_id}` | Relire la prédiction d'une commande |
 | `GET` | `/v1/predictions?limit=20` | Dernières prédictions, de la plus récente à la plus ancienne |
 | `GET` | `/v1/events/predictions` | Flux temps réel des prédictions (Server-Sent Events) |
-| `POST` | `/v1/demo/orders` | Générer des commandes de démonstration (si `DEMO_MODE`, 1 appel / 5 s) |
+| `GET` / `PUT` | `/v1/erp-stream` | État du flux ERP du logisticien ; l'activer ou le couper (`{"active": true}`) |
 | `GET` | `/v1/model` | Model card du modèle en service (métriques, variables, limites) |
 
 Exemple :
@@ -214,7 +214,7 @@ Toute la configuration passe par des variables d'environnement ([`src/config.py`
 | `PREFECT_API_URL` | — | Serveur Prefect utilisé par l'orchestrateur |
 | `RABBITMQ_URL` | — (file en mémoire) | Broker RabbitMQ `amqp://utilisateur:mot-de-passe@hôte:5672/%2F`, fourni par l'environnement (ADR-0013) |
 | `RABBITMQ_ORDERS_QUEUE` / `RABBITMQ_PREDICTIONS_EXCHANGE` | `orders` / `predictions` | File des commandes et échange de diffusion des prédictions |
-| `DEMO_MODE` | `false` | Active le bouton « Générer des commandes » de la page du logisticien |
+| `ERP_STREAM_POLL_SECONDS` | `2` | Fréquence de lecture de l'ERP quand le flux du logisticien est actif |
 | `PORT` | `8000` | Port de l'API dans le conteneur |
 
 En PostgreSQL, les URL utilisent le driver psycopg 3 : `postgresql+psycopg://utilisateur@hôte:5432/base`. Le mot de passe peut être fourni par la variable standard `PGPASSWORD` plutôt que dans l'URL (c'est ce que font les fichiers docker-compose). Au démarrage, le conteneur crée les bases `mlflow` et `ducklake` si elles n'existent pas, puis applique les migrations.
@@ -280,7 +280,7 @@ Les choix structurants sont documentés sous forme d'ADR dans [`IndusIAdansCloud
 | ADR-0007 : Sécuriser les entrées, sorties et l'accès à la donnée | [ADR-0005](IndusIAdansCloud/ADR/ADR-0005%20-%20S%C3%A9curisation%20des%20entr%C3%A9es%2C%20sorties%20et%20acc%C3%A8s%20%C3%A0%20la%20donn%C3%A9e.md) | secrets, image, CI, dépôt, limites connues |
 | *(hors barème)* | [ADR-0009](IndusIAdansCloud/ADR/ADR-0009%20-%20Orchestration%20du%20r%C3%A9entra%C3%AEnement.md) | orchestration Prefect : import ERP horaire, réentraînement, rechargement du modèle |
 | *(hors barème)* | [ADR-0006](IndusIAdansCloud/ADR/ADR-0006%20-%20File%20d'attente.md) | file d'attente des commandes en mémoire (remplacée par l'ADR-0013) |
-| Temps réel (bonus) | [ADR-0013](IndusIAdansCloud/ADR/ADR-0013%20-%20RabbitMQ%20et%20interface%20temps%20r%C3%A9el%20du%20logisticien.md) | RabbitMQ, flux SSE, page du logisticien, bouton de démonstration |
+| Temps réel (bonus) | [ADR-0013](IndusIAdansCloud/ADR/ADR-0013%20-%20RabbitMQ%20et%20interface%20temps%20r%C3%A9el%20du%20logisticien.md) | RabbitMQ, flux SSE, poste du logisticien, flux ERP temps réel |
 | *(hors barème)* | [ADR-0010](IndusIAdansCloud/ADR/ADR-0010%20-%20Garde-fous%20m%C3%A9tier%20et%20contr%C3%B4le%20humain%20de%20la%20promotion.md) | garde-fous métier, alias `challenger`, décision humaine, mode shadow (non retenu) |
 | Estimation budgétaire | [ADR-0011](IndusIAdansCloud/ADR/ADR-0011%20-%20Estimation%20budg%C3%A9taire.md) | quote-part du VPS NetCup, comparaison cloud managé, coût humain |
 | Prise en compte des normes (RGPD) | [ADR-0012](IndusIAdansCloud/ADR/ADR-0012%20-%20Conformit%C3%A9%20RGPD.md) | données pseudonymisées, rôles, minimisation, conservation, hébergement UE |

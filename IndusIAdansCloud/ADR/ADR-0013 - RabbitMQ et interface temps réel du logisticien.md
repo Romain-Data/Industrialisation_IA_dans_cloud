@@ -15,7 +15,7 @@ Contraintes :
 - une seule instance de l'API (ADR-0003) ;
 - un VPS partagé, où la mémoire compte (ADR-0011) ;
 - le contrat `OrderEvent` existe déjà (`openapi.yml`) ;
-- le projet sert à la formation. Pour démontrer le flux sans attendre l'ERP, on accepte un bouton qui **génère des commandes**, ce qui sort du cas métier.
+- le projet sert à la formation : on accepte que le logisticien **active lui-même le flux des commandes de l'ERP** en prenant son poste, ce qui simplifie le cas métier réel.
 
 ## Decision
 
@@ -31,14 +31,18 @@ Nous remplaçons la file en mémoire par **RabbitMQ**, et nous diffusons les pr�
 ### Interface du logisticien
 
 - **`GET /v1/events/predictions`** : flux SSE (`text/event-stream`). Chaque événement `prediction.created` contient la prédiction. Un commentaire *keep-alive* part toutes les 15 s, pour que le proxy ne coupe pas la connexion.
-- **`GET /v1/predictions?limit=N`** : les dernières prédictions, pour afficher l'historique à l'ouverture de la page.
-- **`GET /logisticien`** : une page HTML servie par l'API, en JavaScript natif (`EventSource`), sans framework. Elle affiche les prédictions en direct, met en évidence les commandes **express** et envoie une **notification** (bannière dans la page, et notification du navigateur si le logisticien l'autorise).
+- **`GET /v1/predictions?limit=N`** : les dernières prédictions (historique, consultation).
+- **`GET /logisticien`** : une page HTML servie par l'API, en JavaScript natif (`EventSource`), sans framework.
 
-### Bouton de démonstration
+### Poste du logisticien et flux ERP
 
-- **`POST /v1/demo/orders`** (`count` de 1 à 20) : génère des commandes réalistes au vocabulaire de l'ERP. Elles suivent **exactement le parcours d'une vraie commande** : enregistrement, file `orders`, worker, échange `predictions`, page du logisticien.
-- Activé par **`DEMO_MODE=true`**, en préprod **et en prod** (projet de formation). Sans cette variable, la route répond 404.
-- Garde-fous : 20 commandes au plus par appel, et **un appel toutes les 5 s au plus** (sinon 429). Les commandes générées sont identifiables par leur préfixe `DEMO-`.
+Le logisticien **prend son poste en activant le flux**. Il est notifié de chaque nouvelle commande express et la traite au fil de l'eau ; il peut afficher aussi les commandes standard.
+
+- **`PUT /v1/erp-stream`** (`active: true` ou `false`) et **`GET /v1/erp-stream`** (état, date d'activation, dernière commande lue, commandes reçues). À l'activation, un **connecteur** (`ErpStream`) lit le MongoDB de l'ERP toutes les 2 s (`ERP_STREAM_POLL_SECONDS`), en commençant **après la dernière commande existante** : ni l'historique ni le stock accumulé ne sont relus.
+- Chaque nouvelle commande est nettoyée et validée **comme par l'import horaire** (`validated_row`), enregistrée avec sa cible, puis publiée dans la file `orders`. Elle suit ensuite le parcours d'une commande reçue : worker, prédiction, échange `predictions`, page. L'import horaire suivant la trouve « déjà présente » : pas de doublon, et la cible sert à l'entraînement.
+- Flux coupé : rien n'est lu en temps réel. Les commandes de l'ERP arrivent à l'import horaire, sans notification. Si l'ERP ne répond pas, l'activation est refusée (503) et la page l'indique (c'est le cas en préprod, qui n'a pas d'ERP).
+- **Page** : interrupteur « Prendre mon poste » ; compteurs **depuis l'activation** (commandes reçues, éligibles express, express à traiter) ; liste des **nouvelles commandes express seulement**, chacune avec une notification (bannière, et notification du navigateur si autorisée) et un bouton **« Traitée »** ; case « Afficher aussi les commandes standard » ; bouton **« Vider la liste »**. Le traitement est **local à la page** (non enregistré), ce qui suffit au cadre pédagogique.
+- L'ERP simulé produit 5 commandes toutes les 5 s (`INTERVAL_SECONDS=5`) quand il tourne.
 
 ### Exploitation
 
@@ -52,7 +56,8 @@ Nous remplaçons la file en mémoire par **RabbitMQ**, et nous diffusons les pr�
 - **RabbitMQ plutôt que Kafka ou Redpanda** : quelques centaines de Mo au lieu d'un ou deux Go, pour un volume de quelques commandes par minute. La relecture d'historique de Kafka n'est pas nécessaire : l'historique est en base.
 - **RabbitMQ plutôt que Redis** : files durables, *exchanges* et routage natifs, et c'est l'outil du cours.
 - **SSE plutôt que WebSocket** : le flux ne va que du serveur vers le navigateur. SSE est du HTTP simple, reconnecté automatiquement par `EventSource`, et passe par le proxy de Coolify sans configuration (la compression gzip est déjà désactivée pour `text/event-stream`).
-- **Bouton de démonstration** : il rend le flux démontrable à la demande, en soutenance, sans dépendre du rythme de l'ERP. Il passe par le même chemin qu'une vraie commande, donc il prouve le vrai fonctionnement.
+- **Connecteur ERP piloté par le logisticien** : les commandes viennent du vrai ERP (simulé) et passent par le même chemin qu'une commande reçue, ce qui prouve le fonctionnement réel. L'activation au poste évite de notifier un écran vide ou de relire l'historique.
+- **Même préparation que l'ETL** : une seule règle de nettoyage et de validation, et des données d'entraînement identiques, que la commande arrive par le flux ou par l'import horaire.
 - **Page servie par l'API** : un seul déploiement et une seule origine (pas de CORS). Le besoin est un écran de suivi, pas une application.
 
 ## Consequences
@@ -60,23 +65,25 @@ Nous remplaçons la file en mémoire par **RabbitMQ**, et nous diffusons les pr�
 **Positives**
 - Les commandes en file ne sont plus perdues quand l'API redémarre.
 - Le logisticien voit chaque prédiction en moins d'une seconde, avec une notification pour les commandes express.
-- La démonstration de bout en bout se fait d'un clic, en préprod comme en prod.
+- La démonstration de bout en bout se fait en activant le flux, avec les vraies commandes de l'ERP simulé.
 - Les implémentations en mémoire gardent les tests rapides. Les implémentations RabbitMQ sont testées en CI contre un vrai broker.
 
 **Négatives**
 - Un service de plus à exploiter par environnement (environ 256 Mo chacun).
 - Le message est acquitté à la réception : si l'API s'arrête **pendant** le calcul d'une prédiction, ce message est perdu. La commande reste en base (ADR-0006), et le rattrapage des commandes sans prédiction reste à faire.
-- Les commandes importées de l'ERP par l'ETL horaire (ADR-0007) arrivent déjà étiquetées et ne passent pas par la file : elles n'apparaissent pas sur la page du logisticien.
+- Flux coupé, les commandes de l'ERP n'arrivent qu'à l'import horaire, sans prédiction en temps réel ni notification.
+- Le flux n'existe qu'en prod : la préprod n'a pas d'ERP.
+- L'ERP simulé produit en continu tant qu'il tourne (5 commandes toutes les 5 s, environ 3 600 par heure), même flux coupé : il faut l'éteindre entre deux sessions (`scripts/coolify_power.py`).
 - Le flux SSE et la page sont **publics**, sans authentification. Ils n'exposent que des prédictions, sans donnée personnelle (ADR-0012), mais n'importe qui peut les voir.
-- En prod, n'importe qui peut générer des commandes de démonstration, dans la limite du garde-fou. Elles se mêlent aux vraies données, identifiables par le préfixe `DEMO-`.
+- N'importe qui peut activer ou couper le flux (pas d'authentification) ; acceptable pour la formation. L'état « traitée » d'une commande est perdu au rechargement de la page.
 
 **Neutres**
-- Le contrat d'API passe en version 2.1.0, avec des ajouts compatibles : `GET /v1/predictions`, `GET /v1/events/predictions`, `POST /v1/demo/orders` et le schéma `PredictionEvent`.
+- Le contrat d'API passe en version 2.1.0, avec des ajouts compatibles : `GET /v1/predictions`, `GET /v1/events/predictions`, `GET` et `PUT /v1/erp-stream`, et le schéma `PredictionEvent`.
 - Le format de transport reste JSON. `schema_version` permet de faire évoluer les deux événements.
 
 **Mesures d'atténuation**
-- Les commandes de démonstration (`DEMO-`) sont exclues de l'entraînement : elles n'ont pas de résultat réel, donc ne sont pas étiquetées.
-- Limiter le débit du bouton, et le désactiver (`DEMO_MODE=false`) si l'application sortait du cadre de la formation.
+- Éteindre l'ERP simulé et le reste du projet entre deux sessions (`scripts/coolify_power.py off all`).
+- Hors formation : réserver l'activation du flux à un rôle authentifié, et enregistrer le traitement des commandes en base.
 - Rattrapage au démarrage (republier les commandes sans prédiction) et file des messages en échec (*dead letter*) : à faire.
 
 ## Alternatives considered
@@ -87,7 +94,9 @@ Nous remplaçons la file en mémoire par **RabbitMQ**, et nous diffusons les pr�
 - **WebSocket** : bidirectionnel, inutile ici, et plus complexe à faire passer par le proxy ; écarté.
 - **Interrogation périodique (*polling*) de `GET /v1/predictions`** : simple, mais avec une latence et une charge inutiles ; écarté (la route sert seulement à l'historique initial).
 - **Front-end séparé (React, Streamlit)** : plus riche, mais un service et une origine de plus ; écarté.
-- **Piloter le simulateur ERP depuis l'interface** : demanderait d'accéder à Docker ou à l'API Coolify depuis l'application (refusé dans l'ADR-0009), et ses commandes n'arrivent qu'à l'import horaire ; écarté au profit du bouton de démonstration.
+- **Piloter le simulateur ERP (démarrer ou arrêter son conteneur) depuis l'interface** : demanderait d'accéder à Docker ou à l'API Coolify depuis l'application (refusé dans l'ADR-0009) ; écarté. L'interrupteur pilote le connecteur, pas la production de l'ERP.
+- **Bouton générant des commandes fictives** (première version de cet ADR) : démontrable sans ERP, mais hors cas métier ; remplacé par le flux de l'ERP.
+- **Enregistrer en base le traitement des commandes express** : utile en conditions réelles (plusieurs postes, reprise), inutile pour la démonstration ; reporté.
 
 ## Links
 

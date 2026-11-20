@@ -1,12 +1,9 @@
 """API FastAPI : commandes, prédictions, résultat réel, model card, sondes de santé, et
 flux temps réel du logisticien (ADR-0013)."""
 
-import threading
-import time
 import uuid
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -15,12 +12,15 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 
 from src.abstraction.order_queue import OrderQueue
+from src.abstraction.order_repository import OrderRepository
 from src.abstraction.order_store import DuplicateOrderError, OrderStore
 from src.abstraction.prediction_events import PredictionEvents
 from src.config import (
     DATABASE_URL,
-    DEMO_MIN_INTERVAL_SECONDS,
-    DEMO_MODE,
+    ERP_MONGO_COLLECTION,
+    ERP_MONGO_DATABASE,
+    ERP_MONGO_URI,
+    ERP_STREAM_POLL_SECONDS,
     MODEL_RELOAD_INTERVAL_SECONDS,
     MODEL_VERSION,
     PROJECT_NAME,
@@ -29,30 +29,32 @@ from src.config import (
     RABBITMQ_URL,
 )
 from src.domain.classifier import Classifier
-from src.infrastructure.dev.demo_orders import demo_orders
 from src.infrastructure.dev.order_queue import InMemoryOrderQueue
 from src.infrastructure.dev.prediction_events import InMemoryPredictionEvents
+from src.infrastructure.mongo_order_repository import MongoOrderRepository
 from src.infrastructure.order_store import SqlAlchemyOrderStore
 from src.infrastructure.rabbitmq import RabbitMQOrderQueue, RabbitMQPredictionEvents
 from src.serving.broadcaster import SseBroadcaster, event_stream
 from src.serving.dependencies import (
     get_broadcaster,
+    get_erp_stream_connector,
     get_model,
     get_model_card,
     get_order_queue,
     get_order_store,
     get_worker,
 )
+from src.serving.erp_stream import ErpStream, ErpUnavailableError
+from src.serving.events import order_created_event
 from src.serving.model_loader import champion_version, load_model, load_model_card
 from src.serving.model_reloader import ModelReloader
 from src.serving.schemas import (
-    DemoOrdersAccepted,
-    DemoOrdersRequest,
+    ErpStreamStatus,
+    ErpStreamUpdate,
     Error,
     HealthStatus,
     ModelCard,
     OrderAccepted,
-    OrderEvent,
     OrderFeatures,
     OrderOutcome,
     OrderOutcomeRecorded,
@@ -171,19 +173,15 @@ def create_order(
     return OrderAccepted(order_id=order_data["order_id"], status="accepted")
 
 
-def accept_order(order_data: dict[str, Any], order_store: OrderStore, order_queue: OrderQueue) -> None:
+def accept_order(
+    order_data: dict[str, Any], order_store: OrderStore, order_queue: OrderQueue
+) -> None:
     """Enregistre la commande (source de vérité), puis publie son événement pour le worker.
 
     Chemin commun aux commandes reçues et aux commandes de démonstration (ADR-0013).
     """
     order_store.save(order_data)
-    event = OrderEvent(
-        event_id=str(uuid.uuid4()),
-        event_type="order.created",
-        occurred_at=datetime.now(UTC),
-        order=OrderFeatures(**order_data),
-    )
-    order_queue.publish(event.model_dump(mode="json"))
+    order_queue.publish(order_created_event(order_data))
 
 
 @router.get(
@@ -333,47 +331,50 @@ async def stream_predictions(
     )
 
 
-@router.post(
-    "/v1/demo/orders",
-    tags=["demo"],
-    operation_id="createDemoOrders",
-    summary="Générer des commandes de démonstration",
-    status_code=202,
-    response_model=DemoOrdersAccepted,
-    responses={404: {"model": Error}, 422: {"model": Error}, 429: {"model": Error}},
+@router.get(
+    "/v1/erp-stream",
+    tags=["erp"],
+    operation_id="getErpStream",
+    summary="État du flux temps réel des commandes de l'ERP",
+    response_model=ErpStreamStatus,
 )
-def create_demo_orders(
-    request: Request,
-    demo: DemoOrdersRequest | None = None,
-    order_store: OrderStore = Depends(get_order_store),
-    order_queue: OrderQueue = Depends(get_order_queue),
-) -> DemoOrdersAccepted | JSONResponse:
-    """Commandes générées (préfixe DEMO-), traitées comme de vraies commandes (ADR-0013)."""
-    state = request.app.state
-    if not state.demo_mode:
-        return error_response(404, "demo_disabled", "Le mode démonstration n'est pas activé.")
+def get_erp_stream(erp_stream: ErpStream = Depends(get_erp_stream_connector)) -> dict[str, Any]:
+    """Le flux est-il actif, depuis quand, et combien de commandes a-t-il apportées ?"""
+    return erp_stream.status()
 
-    with state.demo_lock:
-        now = time.monotonic()
-        if now - state.last_demo_at < state.demo_min_interval:
-            return error_response(
-                429,
-                "too_many_requests",
-                f"Attendre {state.demo_min_interval:.0f} s entre deux générations.",
-            )
-        state.last_demo_at = now
 
-    orders = demo_orders((demo or DemoOrdersRequest()).count)
-    for order_data in orders:
-        accept_order(order_data, order_store, order_queue)
-    return DemoOrdersAccepted(order_ids=[order["order_id"] for order in orders], count=len(orders))
+@router.put(
+    "/v1/erp-stream",
+    tags=["erp"],
+    operation_id="updateErpStream",
+    summary="Activer ou couper le flux temps réel de l'ERP",
+    response_model=ErpStreamStatus,
+    responses={422: {"model": Error}, 503: {"model": Error}},
+)
+def update_erp_stream(
+    update: ErpStreamUpdate, erp_stream: ErpStream = Depends(get_erp_stream_connector)
+) -> dict[str, Any] | JSONResponse:
+    """Le logisticien prend son poste (active) ou le quitte (coupe) ; 503 si l'ERP ne répond pas."""
+    if not update.active:
+        return erp_stream.stop()
+    try:
+        return erp_stream.start()
+    except ErpUnavailableError:
+        return error_response(503, "erp_unavailable", "L'ERP ne répond pas : flux non activé.")
 
 
 @router.get("/logisticien", include_in_schema=False)
-def logistician_page(request: Request) -> HTMLResponse:
+def logistician_page() -> HTMLResponse:
     """Page du logisticien : prédictions en direct et notification des commandes express."""
     html = (STATIC_DIR / "logisticien.html").read_text(encoding="utf-8")
-    return HTMLResponse(html.replace("{{DEMO_MODE}}", "true" if request.app.state.demo_mode else "false"))
+    return HTMLResponse(html)
+
+
+def _mongo_erp_source() -> OrderRepository:
+    """Base analytique de l'ERP (MongoDB, lecture seule), lue par le flux temps réel."""
+    return MongoOrderRepository(
+        ERP_MONGO_URI, database=ERP_MONGO_DATABASE, collection=ERP_MONGO_COLLECTION, timeout_ms=3000
+    )
 
 
 def create_app(
@@ -385,8 +386,8 @@ def create_app(
     reload_interval: float = MODEL_RELOAD_INTERVAL_SECONDS,
     prediction_events: PredictionEvents | None = None,
     rabbitmq_url: str | None = RABBITMQ_URL,
-    demo_mode: bool = DEMO_MODE,
-    demo_min_interval: float = DEMO_MIN_INTERVAL_SECONDS,
+    erp_source_factory: Callable[[], OrderRepository] | None = None,
+    erp_poll_seconds: float = ERP_STREAM_POLL_SECONDS,
 ) -> FastAPI:
     """Construit l'application ; les dépendances sont injectables pour les tests."""
 
@@ -429,9 +430,17 @@ def create_app(
             app.state.prediction_events,
         )
         app.state.worker.start()
+        # Flux ERP du logisticien : inactif au démarrage, activé depuis la page (ADR-0013).
+        app.state.erp_stream = ErpStream(
+            erp_source_factory or _mongo_erp_source,
+            app.state.order_store,
+            app.state.order_queue,
+            poll_seconds=erp_poll_seconds,
+        )
 
         yield
 
+        app.state.erp_stream.stop()
         app.state.reloader.stop()
         app.state.worker.stop()
         app.state.prediction_events.close()
@@ -444,11 +453,6 @@ def create_app(
         lifespan=lifespan,
     )
     app.include_router(router)
-    # Bouton de démonstration : activé par DEMO_MODE, limité en fréquence (ADR-0013).
-    app.state.demo_mode = demo_mode
-    app.state.demo_min_interval = demo_min_interval
-    app.state.demo_lock = threading.Lock()
-    app.state.last_demo_at = float("-inf")
     app.add_exception_handler(RequestValidationError, validation_error_handler)
     app.add_exception_handler(Exception, internal_error_handler)
 
