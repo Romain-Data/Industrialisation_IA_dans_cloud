@@ -209,7 +209,7 @@ def test_session_1_routes_are_implemented(client):
         "ReadinessStatus",
         "Error",
         "PredictionList",
-        "DemoOrdersAccepted",
+        "ErpStreamStatus",
     ],
 )
 def test_schemas_match_contract(client, schema):

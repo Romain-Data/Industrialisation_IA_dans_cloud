@@ -51,7 +51,6 @@ RABBITMQ_URL = os.getenv("RABBITMQ_URL")
 RABBITMQ_ORDERS_QUEUE = os.getenv("RABBITMQ_ORDERS_QUEUE", "orders")
 RABBITMQ_PREDICTIONS_EXCHANGE = os.getenv("RABBITMQ_PREDICTIONS_EXCHANGE", "predictions")
 
-# Bouton de démonstration de la page du logisticien (ADR-0013) : hors cas métier.
-DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() in ("1", "true", "yes")
-DEMO_MAX_ORDERS = 20
-DEMO_MIN_INTERVAL_SECONDS = 5.0
+# Flux temps réel de l'ERP, activé par le logisticien (ADR-0013) : lecture de MongoDB
+# toutes les ERP_STREAM_POLL_SECONDS secondes tant que le flux est actif.
+ERP_STREAM_POLL_SECONDS = float(os.getenv("ERP_STREAM_POLL_SECONDS", "2"))

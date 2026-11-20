@@ -8,6 +8,7 @@ from src.abstraction.order_queue import OrderQueue
 from src.abstraction.order_store import OrderStore
 from src.domain.classifier import Classifier
 from src.serving.broadcaster import SseBroadcaster
+from src.serving.erp_stream import ErpStream
 from src.serving.worker import OrderWorker
 
 
@@ -39,3 +40,8 @@ def get_worker(request: Request) -> OrderWorker:
 def get_broadcaster(request: Request) -> SseBroadcaster:
     """Relais des prédictions vers les navigateurs connectés (SSE)."""
     return request.app.state.broadcaster
+
+
+def get_erp_stream_connector(request: Request) -> ErpStream:
+    """Flux temps réel des commandes de l'ERP (activé par le logisticien)."""
+    return request.app.state.erp_stream

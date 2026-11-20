@@ -6,7 +6,7 @@ from dataclasses import fields
 from datetime import UTC
 from typing import Any, Never
 
-from pymongo import ASCENDING, MongoClient
+from pymongo import ASCENDING, DESCENDING, MongoClient
 from pymongo.errors import PyMongoError
 
 from src.abstraction.order_repository import OrderRepository
@@ -85,6 +85,11 @@ class MongoOrderRepository(OrderRepository):
                 self._collection.find(query, NO_ID).sort("order_id", ASCENDING).limit(limit)
             )
         return [(self._to_entity(document), self._label(document)) for document in documents]
+
+    def latest_order_id(self) -> str | None:
+        with _domain_errors():
+            document = self._collection.find_one({}, {"order_id": 1, "_id": 0}, sort=[("order_id", DESCENDING)])
+        return None if document is None else document["order_id"]
 
     def ping(self) -> bool:
         try:

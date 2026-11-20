@@ -1,22 +1,27 @@
-"""Flux temps réel du logisticien (ADR-0013) : diffusion, SSE, historique, démonstration."""
+"""Flux temps réel du logisticien (ADR-0013) : diffusion, SSE, historique, flux ERP."""
 
 import asyncio
 import threading
+from dataclasses import replace
 from pathlib import Path
 
-import pandas as pd
 import pytest
 import yaml
 from fastapi.testclient import TestClient
 
-from src.domain.validation import validate_order
-from src.infrastructure.dev.demo_orders import DEMO_PREFIX, demo_orders
+from src.etl.erp_import import import_erp_orders
+from src.infrastructure.dev.in_memory_order_repository import InMemoryOrderRepository
 from src.infrastructure.dev.order_queue import InMemoryOrderQueue
 from src.infrastructure.dev.prediction_events import InMemoryPredictionEvents
+from src.infrastructure.import_journal import SqlAlchemyImportJournal
+from src.infrastructure.order_store import SqlAlchemyOrderStore
 from src.serving.api import create_app
 from src.serving.broadcaster import SseBroadcaster, event_stream, format_sse
-from src.serving.schemas import OrderFeatures, PredictionEvent
+from src.serving.erp_stream import ErpStream, ErpUnavailableError
+from src.serving.schemas import PredictionEvent
 from tests.conftest import NO_RELOAD, FakeModel, wait_for
+from tests.erp_simulator import erp_orders
+from tests.test_erp_import import to_labeled_entity
 
 CONTRACT = yaml.safe_load(
     (Path(__file__).parent.parent / "openapi.yml").read_text(encoding="utf-8")
@@ -159,59 +164,135 @@ def test_recent_predictions_limit_is_bounded(database_url, limit):
     assert response.json()["error"] == "validation_error"
 
 
-# --- Démonstration ----------------------------------------------------------------------
+# --- Flux ERP du logisticien ------------------------------------------------------------
 
 
-def test_demo_orders_are_valid_orders():
-    orders = demo_orders(20)
-
-    assert all(order["order_id"].startswith(DEMO_PREFIX) for order in orders)
-    assert len({order["order_id"] for order in orders}) == 20
-    for order in orders:
-        OrderFeatures(**order)  # contrat de l'API (vocabulaire de l'ERP)
-    assert validate_order(pd.DataFrame(orders))
+def erp_repository(count, first_sequence=1):
+    """ERP en mémoire, alimenté par le générateur du simulateur du cours."""
+    return InMemoryOrderRepository([to_labeled_entity(o) for o in erp_orders(count, first_sequence)])
 
 
-def test_demo_is_disabled_by_default(database_url):
-    with make_client(database_url, demo_mode=False) as client:
-        response = client.post("/v1/demo/orders", json={"count": 2})
+def add_erp_orders(repository, count, first_sequence):
+    """Nouvelles commandes arrivées dans l'ERP après l'activation du flux."""
+    for order, label in (to_labeled_entity(o) for o in erp_orders(count, first_sequence)):
+        repository._orders[order.order_id] = order  # pylint: disable=protected-access
+        repository._labels[order.order_id] = label  # pylint: disable=protected-access
 
-    assert response.status_code == 404
-    assert response.json()["error"] == "demo_disabled"
+
+def test_stream_reads_only_orders_arrived_after_activation(database_url):
+    repository = erp_repository(10)
+    queue = InMemoryOrderQueue()
+    stream = ErpStream(lambda: repository, SqlAlchemyOrderStore(database_url), queue, poll_seconds=60)
+
+    status = stream.start()
+    try:
+        assert status["active"] is True
+        assert status["last_order_id"] == "ERP-00000010"
+        assert stream.poll_once() == 0  # l'historique n'est pas relu
+
+        add_erp_orders(repository, 3, first_sequence=11)
+        assert stream.poll_once() == 3
+        assert stream.poll_once() == 0  # pas de doublon
+        events = [queue.consume(timeout=0) for _ in range(3)]
+    finally:
+        status = stream.stop()
+
+    assert [event["order"]["order_id"] for event in events] == [
+        "ERP-00000011", "ERP-00000012", "ERP-00000013"
+    ]
+    assert queue.consume(timeout=0) is None
+    assert status["active"] is False
+    assert status["received"] == 3
 
 
-def test_demo_orders_follow_the_real_order_path(database_url):
+def test_stream_skips_invalid_orders_and_moves_on(database_url):
+    repository = erp_repository(1)
+    queue = InMemoryOrderQueue()
+    stream = ErpStream(lambda: repository, SqlAlchemyOrderStore(database_url), queue, poll_seconds=60)
+    stream.start()
+    try:
+        add_erp_orders(repository, 2, first_sequence=2)
+        bad = repository._orders["ERP-00000002"]  # pylint: disable=protected-access
+        repository._orders["ERP-00000002"] = replace(bad, distance_km=-5)  # pylint: disable=protected-access
+
+        assert stream.poll_once() == 1
+        assert stream.status()["last_order_id"] == "ERP-00000003"
+    finally:
+        stream.stop()
+
+
+def test_streamed_orders_are_already_present_for_the_hourly_import(database_url):
+    repository = erp_repository(2)
+    store = SqlAlchemyOrderStore(database_url)
+    journal = SqlAlchemyImportJournal(database_url)
+    import_erp_orders(repository, store, journal)  # import horaire précédent
+
+    stream = ErpStream(lambda: repository, store, InMemoryOrderQueue(), poll_seconds=60)
+    stream.start()
+    try:
+        add_erp_orders(repository, 2, first_sequence=3)
+        assert stream.poll_once() == 2
+    finally:
+        stream.stop()
+
+    report = import_erp_orders(repository, store, journal)
+    assert report.imported == 0
+    assert report.already_present == 2
+    assert store.count_labeled_orders() == 4  # cible conservée pour l'entraînement
+
+
+def test_stream_refuses_to_start_without_erp(database_url):
+    class DownErp(InMemoryOrderRepository):
+        def ping(self):
+            return False
+
+    stream = ErpStream(DownErp, SqlAlchemyOrderStore(database_url), InMemoryOrderQueue())
+
+    with pytest.raises(ErpUnavailableError):
+        stream.start()
+    assert stream.status()["active"] is False
+
+
+def test_logistician_activates_and_cuts_the_stream(database_url):
+    repository = erp_repository(5)
     events = InMemoryPredictionEvents()
     received = []
     events.listen(received.append)
 
-    with make_client(database_url, demo_mode=True, prediction_events=events) as client:
-        response = client.post("/v1/demo/orders", json={"count": 3})
-        body = response.json()
-        wait_for(lambda: True if len(received) == 3 else None)
-        stored = [client.get(f"/v1/orders/{order_id}").status_code for order_id in body["order_ids"]]
+    with make_client(
+        database_url, prediction_events=events, erp_source_factory=lambda: repository,
+        erp_poll_seconds=0.05,
+    ) as client:
+        assert client.get("/v1/erp-stream").json()["active"] is False
 
-    assert response.status_code == 202
-    assert body["count"] == 3
-    assert stored == [200, 200, 200]
-    assert {event["prediction"]["order_id"] for event in received} == set(body["order_ids"])
+        started = client.put("/v1/erp-stream", json={"active": True})
+        add_erp_orders(repository, 2, first_sequence=6)
+        wait_for(lambda: True if len(received) == 2 else None)
+        stopped = client.put("/v1/erp-stream", json={"active": False})
 
-
-def test_demo_default_count_and_rate_limit(database_url):
-    with make_client(database_url, demo_mode=True, demo_min_interval=60) as client:
-        first = client.post("/v1/demo/orders")
-        second = client.post("/v1/demo/orders", json={"count": 1})
-
-    assert first.status_code == 202
-    assert first.json()["count"] == 5
-    assert second.status_code == 429
-    assert second.json()["error"] == "too_many_requests"
+    assert started.status_code == 200
+    assert started.json()["active"] is True
+    assert {event["prediction"]["order_id"] for event in received} == {"ERP-00000006", "ERP-00000007"}
+    assert stopped.json() | {"since": None} == {
+        "active": False, "since": None, "last_order_id": "ERP-00000007", "received": 2
+    }
 
 
-@pytest.mark.parametrize("count", [0, 21])
-def test_demo_count_is_bounded(database_url, count):
-    with make_client(database_url, demo_mode=True) as client:
-        response = client.post("/v1/demo/orders", json={"count": count})
+def test_stream_activation_fails_with_503_when_erp_is_down(database_url):
+    class DownErp(InMemoryOrderRepository):
+        def ping(self):
+            return False
+
+    with make_client(database_url, erp_source_factory=DownErp) as client:
+        response = client.put("/v1/erp-stream", json={"active": True})
+
+    assert response.status_code == 503
+    assert response.json()["error"] == "erp_unavailable"
+
+
+def test_stream_update_requires_active_flag(database_url):
+    with make_client(database_url) as client:
+        response = client.put("/v1/erp-stream", json={})
 
     assert response.status_code == 422
 
@@ -219,15 +300,14 @@ def test_demo_count_is_bounded(database_url, count):
 # --- Page du logisticien et disponibilité ---------------------------------------------
 
 
-@pytest.mark.parametrize("demo_mode", [True, False])
-def test_logistician_page_is_served(database_url, demo_mode):
-    with make_client(database_url, demo_mode=demo_mode) as client:
+def test_logistician_page_is_served(database_url):
+    with make_client(database_url) as client:
         response = client.get("/logisticien")
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
-    assert f"const DEMO_MODE = {'true' if demo_mode else 'false'};" in response.text
     assert "/v1/events/predictions" in response.text
+    assert "/v1/erp-stream" in response.text
 
 
 def test_readiness_fails_when_queue_is_unreachable(database_url):

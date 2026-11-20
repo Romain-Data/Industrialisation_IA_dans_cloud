@@ -41,5 +41,8 @@ class InMemoryOrderRepository(OrderRepository):
         keys = [key for key in sorted(self._orders) if last_order_id is None or key > last_order_id]
         return [(self._orders[key], self._labels[key]) for key in keys[:limit]]
 
+    def latest_order_id(self) -> str | None:
+        return max(self._orders, default=None)
+
     def ping(self) -> bool:
         return True

@@ -28,7 +28,6 @@ x-app-env: &app-env
   PREFECT_API_URL: http://prefect-server:4200/api
   # Pas de valeur par défaut pour le mot de passe : il vient de l'environnement (ADR-0005).
   RABBITMQ_URL: amqp://express:${RABBITMQ_PASSWORD:?définir RABBITMQ_PASSWORD}@rabbitmq:5672/%2F
-  DEMO_MODE: ${DEMO_MODE:-true}
 
 x-app-volumes: &app-volumes
   - mlartifacts:/app/mlartifacts
