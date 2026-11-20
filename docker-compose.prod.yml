@@ -9,7 +9,7 @@
 #     l'interface Prefect reste sur 127.0.0.1 (accès par tunnel SSH, ADR-0009).
 #
 # Variables à fournir (fichier .env non commité, ou variables Coolify) :
-#   APP_VERSION, POSTGRES_PASSWORD, ERP_MONGO_URI
+#   APP_VERSION, POSTGRES_PASSWORD, RABBITMQ_PASSWORD, ERP_MONGO_URI
 #   docker compose -f docker-compose.prod.yml up -d
 
 name: express-delivery-prod
@@ -26,6 +26,9 @@ x-app-env: &app-env
   RETRAIN_MIN_NEW_ORDERS: ${RETRAIN_MIN_NEW_ORDERS:-500}
   MODEL_RELOAD_INTERVAL_SECONDS: "60"
   PREFECT_API_URL: http://prefect-server:4200/api
+  # Pas de valeur par défaut pour le mot de passe : il vient de l'environnement (ADR-0005).
+  RABBITMQ_URL: amqp://express:${RABBITMQ_PASSWORD:?définir RABBITMQ_PASSWORD}@rabbitmq:5672/%2F
+  DEMO_MODE: ${DEMO_MODE:-true}
 
 x-app-volumes: &app-volumes
   - mlartifacts:/app/mlartifacts
@@ -69,6 +72,8 @@ services:
     ports:
       - "127.0.0.1:${API_PORT:-8000}:8000"
     depends_on:
+      rabbitmq:
+        condition: service_healthy
       migrate:
         condition: service_completed_successfully
     restart: unless-stopped
@@ -76,6 +81,25 @@ services:
       resources:
         limits: {memory: 1g, cpus: "1"}
 
+  # File des commandes et diffusion des prédictions (ADR-0013) : réseau interne uniquement.
+  rabbitmq:
+    image: rabbitmq:4-alpine
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: express
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?définir RABBITMQ_PASSWORD}
+      RABBITMQ_NODENAME: rabbit@rabbitmq
+    volumes:
+      - rabbitmq:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: {memory: 256m, cpus: "0.5"}
   prefect-server:
     image: prefecthq/prefect:3.9.3-python3.12
     command: ["prefect", "server", "start", "--host", "0.0.0.0"]
@@ -110,6 +134,7 @@ services:
         limits: {memory: 1536m, cpus: "1"}
 
 volumes:
+  rabbitmq:
   pgdata:
   mlartifacts:
   ducklake:

@@ -66,3 +66,7 @@ class OrderStore(ABC):
     @abstractmethod
     def get_prediction(self, order_id: str) -> dict[str, Any] | None:
         """Retourne la prédiction de la commande, ou None si elle n'existe pas."""
+
+    @abstractmethod
+    def recent_predictions(self, limit: int) -> list[dict[str, Any]]:
+        """Retourne les `limit` dernières prédictions, de la plus récente à la plus ancienne."""

@@ -1,6 +1,6 @@
 # ADR-0006 : File d'attente des commandes
 
-- Status: Accepted
+- Status: Superseded by ADR-0013 (2026-11-20) : RabbitMQ en préprod et en prod ; l'implémentation en mémoire reste celle du développement et des tests
 - Date: 2026-11-17
 - Deciders: Romain
 - Tags: `architecture`, `messaging`

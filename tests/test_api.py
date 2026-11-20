@@ -29,6 +29,7 @@ def test_readiness_when_everything_is_up(client):
         "model": "loaded",
         "order_store": "reachable",
         "schema": "up_to_date",
+        "queue": "reachable",
         "worker": "running",
     }
 
@@ -207,6 +208,8 @@ def test_session_1_routes_are_implemented(client):
         "ModelCard",
         "ReadinessStatus",
         "Error",
+        "PredictionList",
+        "DemoOrdersAccepted",
     ],
 )
 def test_schemas_match_contract(client, schema):
