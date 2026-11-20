@@ -17,6 +17,14 @@ Le schéma de base évolue avec Alembic (`migrations/`), et le modèle servi év
 
 Nous déployons par une CI GitHub Actions qui déclenche Coolify uniquement quand les contrôles passent, avec deux environnements.
 
+### Nom de la stratégie
+
+- **Code (application)** : *déploiement continu avec validation en préproduction et promotion de l'image*, suivi d'un **remplacement complet (« Big Bang ») protégé par un health check**. Avec une seule instance, tout le trafic passe d'un coup à la nouvelle version : il n'y a ni bascule progressive (*rolling* sur plusieurs instances, *canary*), ni environnement de secours vers lequel rebasculer (*blue-green*). Ce n'est pas pour autant un Big Bang « à l'aveugle » :
+  - la même image a d'abord été vérifiée en préprod ;
+  - Coolify ne met la nouvelle version en service que si `/health/ready` répond, sinon l'ancienne reste en place ;
+  - le rollback consiste à redéployer le tag d'image précédent.
+- **Modèle** : stratégie **champion / challenger**, avec promotion par déplacement de l'alias `champion`, garde-fous métier et décision humaine (ADR-0002, ADR-0010). Le *shadow* et le *canary* ont été étudiés mais ne sont pas retenus pour l'instant (ADR-0010).
+
 - **Environnements** : une application Coolify **preprod** et une application **prod**, chacune avec sa propre base PostgreSQL, ses volumes et ses variables d'environnement. Une fusion sur `develop` déploie en preprod ; une fusion de `develop` dans `main`, autorisée seulement si la preprod est vérifiée, déploie en prod (mise à jour du 2026-11-17, voir plus bas).
 - **Pipeline CI/CD** : à chaque push et pull request, lint (`ruff`), qualité (`pylint`, score minimal) et tests (`pytest`, avec un MongoDB réel). Sur `develop`, les images `linux/amd64` de l'API et de l'orchestrateur sont **construites une seule fois**, testées au démarrage, scannées par Trivy (échec sur toute vulnérabilité critique corrigeable) et publiées sur GHCR avec le tag `sha-<commit>` ; puis la preprod est déployée et vérifiée. Sur `main`, ces **mêmes images** sont promues (tag `X.Y.Z`, même empreinte) et déployées en prod.
 - **Auto-deploy Coolify désactivé** : Coolify ne déploie jamais de lui-même sur push ; seule la CI le déclenche. Coolify tire l'image publiée par tag, sans la reconstruire.
@@ -27,6 +35,10 @@ Nous déployons par une CI GitHub Actions qui déclenche Coolify uniquement quan
 - **Rollback du code** : on redéploie le tag d'image précédent depuis Coolify. Le rollback du modèle reste le déplacement manuel de l'alias `champion` (ADR-0002) et ne nécessite pas de redéploiement.
 - **Secrets** : les secrets de déploiement (URL et jeton de l'API Coolify) sont des secrets GitHub Actions ; les secrets d'exécution restent dans Coolify (ADR-0003). Le jeton est limité au projet Coolify de cette application, avec les seuls droits nécessaires au déploiement (`write` pour fixer le tag d'image, `deploy`).
 - **Accès à l'API Coolify** : l'API accepte les appels de toutes les IP, car les runners GitHub n'ont pas d'adresse fixe. La protection repose sur le jeton.
+
+### Schéma de la pipeline CI/CD
+
+![Pipeline CI/CD : du commit à la production](../schemas/cicd_pipeline.svg)
 
 ### Justification
 

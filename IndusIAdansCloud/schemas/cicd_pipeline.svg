@@ -1,0 +1,131 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" font-family="Inter, DejaVu Sans, sans-serif">
+<defs><marker id="ah-64748B" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="#64748B"/></marker><marker id="ah-D93B3B" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="#D93B3B"/></marker><marker id="ah-6B4FD8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="#6B4FD8"/></marker><marker id="ah-2F6FD6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="#2F6FD6"/></marker><marker id="ah-D97706" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="#D97706"/></marker><marker id="ah-16A34A" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="#16A34A"/></marker></defs>
+<rect width="1920" height="1080" fill="#FFFFFF"/>
+<text x="960" y="58" text-anchor="middle" font-size="34" font-weight="800" fill="#0F172A">CI/CD — du commit à la production <tspan font-weight="500" fill="#64748B">(GitHub Actions + Coolify)</tspan></text>
+<rect x="30" y="92" width="1860" height="192" rx="18" fill="#EEF4FD"/>
+<rect x="30" y="92" width="8" height="192" rx="4" fill="#2F6FD6"/>
+<rect x="1581.0" y="104" width="285.0" height="30" rx="15" fill="#2F6FD6"/>
+<text x="1723.5" y="124.5" text-anchor="middle" font-size="15" font-weight="700" fill="#FFFFFF">Branche de fonctionnalité</text>
+<rect x="57" y="150" width="250" height="112" rx="12" fill="#FFFFFF" stroke="#2F6FD6" stroke-width="2"/>
+<g transform="translate(170.0,164)" fill="none" stroke="#2F6FD6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="5" r="2.5"/><circle cx="6" cy="19" r="2.5"/><circle cx="18" cy="8" r="2.5"/><path d="M6 7.5v9"/><path d="M18 10.5c0 4-4 5-11 7"/></g>
+<text x="182.0" y="210" text-anchor="middle" font-size="15.5" font-weight="700" fill="#1B2433">git push</text>
+<rect x="397" y="150" width="250" height="112" rx="12" fill="#FFFFFF" stroke="#2F6FD6" stroke-width="2"/>
+<g transform="translate(510.0,164)" fill="none" stroke="#2F6FD6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/><circle cx="12" cy="12" r="6.5"/></g>
+<text x="522.0" y="210" text-anchor="middle" font-size="15.5" font-weight="700" fill="#1B2433">Checks</text>
+<text x="522.0" y="229" text-anchor="middle" font-size="13.5" fill="#4A5568">ruff · pylint · pytest</text>
+<text x="522.0" y="248" text-anchor="middle" font-size="13.5" fill="#4A5568">(+ MongoDB)</text>
+<rect x="737" y="150" width="250" height="112" rx="12" fill="#FFFFFF" stroke="#2F6FD6" stroke-width="2"/>
+<g transform="translate(850.0,164)" fill="none" stroke="#2F6FD6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="5" r="2.5"/><circle cx="6" cy="19" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M6 7.5v9"/><path d="M18 16.5V9a3 3 0 0 0-3-3h-4"/><path d="M13 3.5 10.5 6 13 8.5"/></g>
+<text x="862.0" y="210" text-anchor="middle" font-size="15.5" font-weight="700" fill="#1B2433">Pull request</text>
+<text x="862.0" y="229" text-anchor="middle" font-size="13.5" fill="#4A5568">vers develop</text>
+<line x1="311" y1="206.0" x2="391" y2="206.0" stroke="#2F6FD6" stroke-width="2" marker-end="url(#ah-2F6FD6)"/>
+<line x1="651" y1="206.0" x2="731" y2="206.0" stroke="#2F6FD6" stroke-width="2" marker-end="url(#ah-2F6FD6)"/>
+<rect x="30" y="316" width="1860" height="302" rx="18" fill="#FFF6E8"/>
+<rect x="30" y="316" width="8" height="302" rx="4" fill="#D97706"/>
+<rect x="1662.6" y="328" width="203.39999999999998" height="30" rx="15" fill="#D97706"/>
+<text x="1764.3" y="348.5" text-anchor="middle" font-size="15" font-weight="700" fill="#FFFFFF">develop → PRÉPROD</text>
+<rect x="57" y="374" width="196" height="112" rx="12" fill="#FFFFFF" stroke="#D97706" stroke-width="2"/>
+<g transform="translate(143.0,388)" fill="none" stroke="#D97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="13" rx="1.5"/><path d="M6.5 9v7M10 9v7M14 9v7M17.5 9v7"/></g>
+<text x="155.0" y="434" text-anchor="middle" font-size="15.5" font-weight="700" fill="#1B2433">Build images</text>
+<text x="155.0" y="453" text-anchor="middle" font-size="13.5" fill="#4A5568">api + orchestrator</text>
+<text x="155.0" y="472" text-anchor="middle" font-size="13.5" fill="#4A5568">(linux/amd64)</text>
+<rect x="287" y="374" width="196" height="112" rx="12" fill="#FFFFFF" stroke="#D97706" stroke-width="2"/>
+<g transform="translate(373.0,388)" fill="none" stroke="#D97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/><circle cx="12" cy="12" r="6.5"/></g>
+<text x="385.0" y="434" text-anchor="middle" font-size="15.5" font-weight="700" fill="#1B2433">Test de</text>
+<text x="385.0" y="453" text-anchor="middle" font-size="13.5" fill="#4A5568">démarrage</text>
+<text x="385.0" y="472" text-anchor="middle" font-size="13.5" fill="#4A5568">des conteneurs</text>
+<rect x="517" y="374" width="196" height="112" rx="12" fill="#FFFFFF" stroke="#D97706" stroke-width="2"/>
+<g transform="translate(603.0,388)" fill="none" stroke="#D97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 20 5v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5z"/><path d="m8.5 12 2.5 2.5 4.5-5"/></g>
+<text x="615.0" y="434" text-anchor="middle" font-size="15.5" font-weight="700" fill="#1B2433">Scan Trivy</text>
+<text x="615.0" y="453" text-anchor="middle" font-size="13.5" fill="#4A5568">vulnérabilités</text>
+<rect x="747" y="374" width="196" height="112" rx="12" fill="#FFFFFF" stroke="#D97706" stroke-width="2"/>
+<g transform="translate(833.0,388)" fill="none" stroke="#D97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></g>
+<text x="845.0" y="434" text-anchor="middle" font-size="15.5" font-weight="700" fill="#1B2433">Publication GHCR</text>
+<text x="845.0" y="453" text-anchor="middle" font-size="13.5" fill="#4A5568">sha-xxxxxxx</text>
+<rect x="977" y="374" width="196" height="112" rx="12" fill="#FFFFFF" stroke="#D97706" stroke-width="2"/>
+<g transform="translate(1063.0,388)" fill="none" stroke="#D97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M7 7h.01M7 17h.01"/></g>
+<text x="1075.0" y="434" text-anchor="middle" font-size="15.5" font-weight="700" fill="#1B2433">Déploiement</text>
+<text x="1075.0" y="453" text-anchor="middle" font-size="13.5" fill="#4A5568">Coolify préprod</text>
+<rect x="1207" y="374" width="196" height="112" rx="12" fill="#FFFFFF" stroke="#D97706" stroke-width="2"/>
+<g transform="translate(1293.0,388)" fill="none" stroke="#D97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2-5 3 10 2.5-6 1.5 1h5"/></g>
+<text x="1305.0" y="434" text-anchor="middle" font-size="15.5" font-weight="700" fill="#1B2433">Health check</text>
+<text x="1305.0" y="453" text-anchor="middle" font-size="13.5" fill="#4A5568">/health/ready</text>
+<rect x="1437" y="374" width="196" height="112" rx="12" fill="#FFFFFF" stroke="#D97706" stroke-width="2"/>
+<g transform="translate(1523.0,388)" fill="none" stroke="#D97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.8 3h10.4a2 2 0 0 0 1.8-3l-5-9V3"/><path d="M7.5 15h9"/></g>
+<text x="1535.0" y="434" text-anchor="middle" font-size="15.5" font-weight="700" fill="#1B2433">Tests de fumée</text>
+<text x="1535.0" y="453" text-anchor="middle" font-size="13.5" fill="#4A5568">complets</text>
+<rect x="1667" y="388" width="196" height="84" rx="42" fill="#16A34A"/>
+<g transform="translate(1689,418.0)" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m7.5 12.5 3 3 6-6.5"/></g>
+<text x="1723" y="427.0" font-size="16" font-weight="800" fill="#FFFFFF">Préprod</text>
+<text x="1723" y="447.0" font-size="16" font-weight="800" fill="#FFFFFF">vérifiée</text>
+<line x1="256" y1="430.0" x2="282" y2="430.0" stroke="#D97706" stroke-width="2" marker-end="url(#ah-D97706)"/>
+<line x1="486" y1="430.0" x2="512" y2="430.0" stroke="#D97706" stroke-width="2" marker-end="url(#ah-D97706)"/>
+<line x1="716" y1="430.0" x2="742" y2="430.0" stroke="#D97706" stroke-width="2" marker-end="url(#ah-D97706)"/>
+<line x1="946" y1="430.0" x2="972" y2="430.0" stroke="#D97706" stroke-width="2" marker-end="url(#ah-D97706)"/>
+<line x1="1176" y1="430.0" x2="1202" y2="430.0" stroke="#D97706" stroke-width="2" marker-end="url(#ah-D97706)"/>
+<line x1="1406" y1="430.0" x2="1432" y2="430.0" stroke="#D97706" stroke-width="2" marker-end="url(#ah-D97706)"/>
+<line x1="1636" y1="430.0" x2="1662" y2="430.0" stroke="#D97706" stroke-width="2" marker-end="url(#ah-D97706)"/>
+<line x1="1305.0" y1="488" x2="1305.0" y2="526" stroke="#D93B3B" stroke-width="2" stroke-dasharray="7 6" marker-end="url(#ah-D93B3B)"/>
+<rect x="1191.0" y="530" width="228" height="54" rx="10" fill="#FDECEC" stroke="#D93B3B" stroke-width="1.6"/>
+<text x="1305.0" y="552" text-anchor="middle" font-size="13.5" font-weight="700" fill="#D93B3B">échec → l'ancienne version</text>
+<text x="1305.0" y="571" text-anchor="middle" font-size="13.5" fill="#9B1C1C">reste en service</text>
+<path d="M862.0 264 V300.0 H155.0 V368" fill="none" stroke="#2F6FD6" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah-2F6FD6)"/>
+<rect x="880.0" y="289.0" width="92" height="22" rx="11" fill="#FFFFFF" stroke="#2F6FD6" stroke-width="1.2"/>
+<text x="926.0" y="304.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2F6FD6">merge</text>
+<rect x="30" y="650" width="1860" height="302" rx="18" fill="#F3F0FD"/>
+<rect x="30" y="650" width="8" height="302" rx="4" fill="#6B4FD8"/>
+<rect x="1723.8" y="662" width="142.2" height="30" rx="15" fill="#6B4FD8"/>
+<text x="1794.8999999999999" y="682.5" text-anchor="middle" font-size="15" font-weight="700" fill="#FFFFFF">main → PROD</text>
+<rect x="57" y="708" width="220" height="112" rx="12" fill="#FFFFFF" stroke="#6B4FD8" stroke-width="2"/>
+<g transform="translate(155.0,722)" fill="none" stroke="#6B4FD8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="5" r="2.5"/><circle cx="6" cy="19" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M6 7.5v9"/><path d="M18 16.5V9a3 3 0 0 0-3-3h-4"/><path d="M13 3.5 10.5 6 13 8.5"/></g>
+<text x="167.0" y="768" text-anchor="middle" font-size="15.5" font-weight="700" fill="#1B2433">PR develop → main</text>
+<text x="167.0" y="787" text-anchor="middle" font-size="13.5" fill="#4A5568">statut obligatoire,</text>
+<text x="167.0" y="806" text-anchor="middle" font-size="13.5" fill="#4A5568">relue par Romain</text>
+<rect x="321" y="708" width="220" height="112" rx="12" fill="#FFFFFF" stroke="#6B4FD8" stroke-width="2"/>
+<g transform="translate(419.0,722)" fill="none" stroke="#6B4FD8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="13" rx="1.5"/><path d="M6.5 9v7M10 9v7M14 9v7M17.5 9v7"/></g>
+<text x="431.0" y="768" text-anchor="middle" font-size="15.5" font-weight="700" fill="#1B2433">Promotion</text>
+<text x="431.0" y="787" text-anchor="middle" font-size="13.5" fill="#4A5568">mêmes images retaguées</text>
+<text x="431.0" y="806" text-anchor="middle" font-size="13.5" fill="#4A5568">X.Y.Z (sans rebuild)</text>
+<rect x="585" y="708" width="220" height="112" rx="12" fill="#FFFFFF" stroke="#6B4FD8" stroke-width="2"/>
+<g transform="translate(683.0,722)" fill="none" stroke="#6B4FD8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9z"/><circle cx="7.5" cy="7.5" r="1.5"/></g>
+<text x="695.0" y="768" text-anchor="middle" font-size="15.5" font-weight="700" fill="#1B2433">Tag +</text>
+<text x="695.0" y="787" text-anchor="middle" font-size="13.5" fill="#4A5568">GitHub Release</text>
+<rect x="849" y="708" width="220" height="112" rx="12" fill="#FFFFFF" stroke="#6B4FD8" stroke-width="2"/>
+<g transform="translate(947.0,722)" fill="none" stroke="#6B4FD8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M7 7h.01M7 17h.01"/></g>
+<text x="959.0" y="768" text-anchor="middle" font-size="15.5" font-weight="700" fill="#1B2433">Déploiement</text>
+<text x="959.0" y="787" text-anchor="middle" font-size="13.5" fill="#4A5568">Coolify prod</text>
+<rect x="1113" y="708" width="220" height="112" rx="12" fill="#FFFFFF" stroke="#6B4FD8" stroke-width="2"/>
+<g transform="translate(1211.0,722)" fill="none" stroke="#6B4FD8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2-5 3 10 2.5-6 1.5 1h5"/></g>
+<text x="1223.0" y="768" text-anchor="middle" font-size="15.5" font-weight="700" fill="#1B2433">Health check</text>
+<text x="1223.0" y="787" text-anchor="middle" font-size="13.5" fill="#4A5568">/health/ready</text>
+<rect x="1377" y="708" width="220" height="112" rx="12" fill="#FFFFFF" stroke="#6B4FD8" stroke-width="2"/>
+<g transform="translate(1475.0,722)" fill="none" stroke="#6B4FD8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.8 3h10.4a2 2 0 0 0 1.8-3l-5-9V3"/><path d="M7.5 15h9"/></g>
+<text x="1487.0" y="768" text-anchor="middle" font-size="15.5" font-weight="700" fill="#1B2433">Smoke test</text>
+<text x="1487.0" y="787" text-anchor="middle" font-size="13.5" fill="#4A5568">lecture seule</text>
+<rect x="1641" y="708" width="220" height="112" rx="14" fill="#0F172A"/>
+<g transform="translate(1739.0,726)" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c3.5 2.5 5 6.5 4.5 11l-2 3h-5l-2-3C7 8.5 8.5 4.5 12 2z"/><circle cx="12" cy="9" r="1.8"/><path d="M7.5 13 4.5 16l3 1M16.5 13l3 3-3 1M10.5 19l1.5 3 1.5-3"/></g>
+<text x="1751.0" y="780" text-anchor="middle" font-size="18" font-weight="800" fill="#FFFFFF">En production</text>
+<text x="1751.0" y="801" text-anchor="middle" font-size="13" fill="#A7F3D0">● version X.Y.Z active</text>
+<line x1="280" y1="764.0" x2="316" y2="764.0" stroke="#6B4FD8" stroke-width="2" marker-end="url(#ah-6B4FD8)"/>
+<line x1="544" y1="764.0" x2="580" y2="764.0" stroke="#6B4FD8" stroke-width="2" marker-end="url(#ah-6B4FD8)"/>
+<line x1="808" y1="764.0" x2="844" y2="764.0" stroke="#6B4FD8" stroke-width="2" marker-end="url(#ah-6B4FD8)"/>
+<line x1="1072" y1="764.0" x2="1108" y2="764.0" stroke="#6B4FD8" stroke-width="2" marker-end="url(#ah-6B4FD8)"/>
+<line x1="1336" y1="764.0" x2="1372" y2="764.0" stroke="#6B4FD8" stroke-width="2" marker-end="url(#ah-6B4FD8)"/>
+<line x1="1600" y1="764.0" x2="1636" y2="764.0" stroke="#6B4FD8" stroke-width="2" marker-end="url(#ah-6B4FD8)"/>
+<line x1="1223.0" y1="822" x2="1223.0" y2="860" stroke="#D93B3B" stroke-width="2" stroke-dasharray="7 6" marker-end="url(#ah-D93B3B)"/>
+<rect x="1109.0" y="864" width="228" height="54" rx="10" fill="#FDECEC" stroke="#D93B3B" stroke-width="1.6"/>
+<text x="1223.0" y="886" text-anchor="middle" font-size="13.5" font-weight="700" fill="#D93B3B">échec → l'ancienne version</text>
+<text x="1223.0" y="905" text-anchor="middle" font-size="13.5" fill="#9B1C1C">reste en service</text>
+<path d="M1765.0 474 V634.0 H167.0 V702" fill="none" stroke="#16A34A" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah-16A34A)"/>
+<rect x="856.0" y="623.0" width="220" height="22" rx="11" fill="#FFFFFF" stroke="#16A34A" stroke-width="1.2"/>
+<text x="966.0" y="638.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#16A34A">ouverture de la PR de release</text>
+<rect x="1180" y="990" width="330" height="58" rx="12" fill="#FFFFFF" stroke="#D93B3B" stroke-width="2" stroke-dasharray="6 5"/>
+<g transform="translate(1198,1007.0)" fill="none" stroke="#D93B3B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></g>
+<text x="1234" y="1015" font-size="15" font-weight="700" fill="#1B2433">Coolify : redéployer</text>
+<text x="1234" y="1034" font-size="13.5" fill="#4A5568">le tag précédent (X.Y.Z-1)</text>
+<path d="M1751.0 822 V1019.0 H1515" fill="none" stroke="#D93B3B" stroke-width="2.2" stroke-dasharray="7 6" stroke-linejoin="round" marker-end="url(#ah-D93B3B)"/>
+<path d="M1180 1019.0 H959.0 V826" fill="none" stroke="#D93B3B" stroke-width="2.2" stroke-dasharray="7 6" stroke-linejoin="round" marker-end="url(#ah-D93B3B)"/>
+<rect x="1620" y="989.0" width="96" height="24" rx="12" fill="#D93B3B"/>
+<text x="1668" y="1006.0" text-anchor="middle" font-size="13.5" font-weight="800" fill="#FFFFFF">rollback</text>
+<text x="57" y="1024.0" font-size="13" fill="#64748B">Même image testée en préprod → promue en prod : aucune reconstruction entre les deux environnements.</text>
+</svg>
