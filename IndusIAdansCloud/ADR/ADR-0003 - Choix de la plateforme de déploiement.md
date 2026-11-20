@@ -89,6 +89,6 @@ Deux environnements identiques (preprod, prod) sur le même VPS, chacun avec son
 
 ## Links
 
-- Related ADRs : [[ADR-0001 - Stockage des commandes]], [[ADR-0002 - Stockage des artefacts de modele]], [[ADR-0004 - Stratégie de déploiement]]
+- Related ADRs : [[ADR-0001 - Stockage des commandes]], [[ADR-0002 - Stockage des artefacts de modele]], [[ADR-0004 - Stratégie de déploiement]], [[ADR-0008 - Cloud, on-premise ou local]]
 - External references :
   - [Coolify](https://coolify.io/docs)
