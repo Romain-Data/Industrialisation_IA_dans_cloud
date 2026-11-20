@@ -11,13 +11,14 @@ main avec `python -m src.etl.erp_import` (mode `etl` de l'image Docker).
 """
 
 import logging
-from collections import Counter
-from dataclasses import asdict, dataclass, field
+from collections.abc import Iterable
+from dataclasses import asdict
 from datetime import UTC, datetime
 
 from src.abstraction.import_journal import ImportJournal
 from src.abstraction.order_repository import OrderRepository
 from src.abstraction.order_store import OrderStore
+from src.domain.entities import ImportReport, OrderEntity
 from src.domain.order_quality import clean_order, order_errors
 
 logger = logging.getLogger(__name__)
@@ -25,21 +26,6 @@ logger = logging.getLogger(__name__)
 SOURCE = "erp-mongodb"
 ERP_ID_PREFIX = "ERP-"
 MAX_LOGGED_REJECTIONS = 20
-
-
-@dataclass
-class ImportReport:
-    """Compte rendu d'un import."""
-
-    started_at: datetime
-    finished_at: datetime | None = None
-    last_order_id: str | None = None
-    read: int = 0
-    imported: int = 0
-    already_present: int = 0
-    rejected: int = 0
-    unlabeled: int = 0
-    rejection_reasons: Counter = field(default_factory=Counter)
 
 
 def import_erp_orders(
@@ -87,7 +73,7 @@ def import_erp_orders(
     return report
 
 
-def _reject(report, order_id, errors):
+def _reject(report: ImportReport, order_id: str | None, errors: Iterable[str]) -> None:
     """Compte et journalise une commande rejetée (les premières seulement, en détail)."""
     report.rejected += 1
     report.rejection_reasons.update(error.split(" (")[0] for error in errors)
@@ -95,7 +81,7 @@ def _reject(report, order_id, errors):
         logger.warning("Commande %s rejetée : %s", order_id, "; ".join(errors))
 
 
-def _to_row(order, label):
+def _to_row(order: OrderEntity, label: int | None) -> dict[str, object]:
     """OrderEntity validée -> ligne de la table commandes (date ERP en created_at)."""
     row = asdict(order)
     order_date = row.pop("order_date")
@@ -104,7 +90,7 @@ def _to_row(order, label):
     return row
 
 
-def main():
+def main() -> ImportReport:
     """Point d'entrée : un import complet depuis la base analytique de l'ERP."""
     from src.config import (
         DATABASE_URL,

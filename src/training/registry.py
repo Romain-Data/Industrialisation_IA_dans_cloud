@@ -1,10 +1,14 @@
 """Registre MLflow : configuration de l'expérience et promotion du champion (ADR-0002)."""
 
+from collections.abc import Iterable
 from pathlib import Path
+from typing import Literal
 
 import mlflow
 import mlflow.sklearn
+import pandas as pd
 from mlflow import MlflowClient
+from mlflow.entities.model_registry import ModelVersion
 
 from src.config import (
     CHALLENGER_ALIAS,
@@ -15,11 +19,15 @@ from src.config import (
     PROMOTION_METRIC,
     REGISTERED_MODEL_NAME,
 )
+from src.domain.classifier import Classifier
 from src.domain.evaluation import evaluate, guardrail_failures
 from src.domain.features import DATA_SCHEMA_VERSION
 
+# Issue d'un entraînement : nouveau champion, challenger soumis à l'humain, ou écarté.
+PromotionDecision = Literal["champion", "challenger", "rejected"]
 
-def configure_mlflow():
+
+def configure_mlflow() -> None:
     """Pointe MLflow sur le registre et crée l'expérience avec sa racine d'artefacts."""
     mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 
@@ -30,7 +38,7 @@ def configure_mlflow():
     mlflow.set_experiment(MLFLOW_EXPERIMENT)
 
 
-def promote_if_better(run_id, holdout):
+def promote_if_better(run_id: str, holdout: pd.DataFrame) -> PromotionDecision:
     """Décide du sort de la version du run ; retourne "champion", "challenger" ou "rejected".
 
     1. Le champion est noté sur le même jeu d'évaluation que le candidat (`holdout`,
@@ -80,7 +88,7 @@ def promote_if_better(run_id, holdout):
     return _record(client, run_id, "champion")
 
 
-def promote_version(version=None):
+def promote_version(version: int | str | None = None) -> int:
     """Décision humaine : place l'alias champion sur `version` (par défaut, le challenger).
 
     Sert à valider un challenger après examen, ou à revenir à une version antérieure
@@ -104,18 +112,23 @@ def promote_version(version=None):
     return int(model_version.version)
 
 
-def _load_version(version):
+def _load_version(version: int | str) -> Classifier:
     return mlflow.sklearn.load_model(f"models:/{REGISTERED_MODEL_NAME}/{version}")
 
 
-def _version_by_alias(client, alias):
+def _version_by_alias(client: MlflowClient, alias: str) -> ModelVersion | None:
     try:
         return client.get_model_version_by_alias(REGISTERED_MODEL_NAME, alias)
     except mlflow.MlflowException:
         return None
 
 
-def _record(client, run_id, decision, failures=()):
+def _record(
+    client: MlflowClient,
+    run_id: str,
+    decision: PromotionDecision,
+    failures: Iterable[str] = (),
+) -> PromotionDecision:
     """Enregistre la décision (et les garde-fous violés) dans le run du candidat."""
     client.set_tag(run_id, "promotion_decision", decision)
     if failures:

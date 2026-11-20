@@ -13,7 +13,7 @@ from src.config import MLFLOW_EXPERIMENT, MLFLOW_TRACKING_URI
 from src.infrastructure.collect_ducklake import MIN_LABELED_ORDERS
 
 
-def should_retrain(labeled_orders, last_trained_on, min_new_orders):
+def should_retrain(labeled_orders: int, last_trained_on: int | None, min_new_orders: int) -> bool:
     """Décide du réentraînement.
 
     - `labeled_orders` : commandes étiquetées disponibles aujourd'hui ;
@@ -28,7 +28,7 @@ def should_retrain(labeled_orders, last_trained_on, min_new_orders):
     return labeled_orders - last_trained_on >= min_new_orders
 
 
-def orders_seen_by_last_training(data_source="ducklake"):
+def orders_seen_by_last_training(data_source: str = "ducklake") -> int | None:
     """Commandes lues par le dernier entraînement de cette source (gardées + écartées)."""
     mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
     experiment = mlflow.get_experiment_by_name(MLFLOW_EXPERIMENT)

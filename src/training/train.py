@@ -1,7 +1,10 @@
 """Entraînement du modèle (régression logistique scikit-learn) et journalisation dans MLflow."""
 
+from typing import Any
+
 import mlflow
 import mlflow.sklearn
+import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
@@ -20,7 +23,9 @@ from src.domain.features import (
 from src.training.registry import configure_mlflow
 
 
-def train_model(train, holdout, params=None):
+def train_model(
+    train: pd.DataFrame, holdout: pd.DataFrame, params: dict[str, Any] | None = None
+) -> tuple[Pipeline, dict[str, float], str]:
     """Entraîne le pipeline, l'évalue sur le jeu d'évaluation commun et l'enregistre dans MLflow.
 
     `train` et `holdout` viennent de `split_holdout` (src/domain/evaluation.py) : le

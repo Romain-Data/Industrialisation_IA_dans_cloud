@@ -1,9 +1,10 @@
 """Lecture des commandes ERP dans MongoDB, la base analytique de l'entreprise (ADR-0007)."""
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import fields
 from datetime import UTC
+from typing import Any, Never
 
 from pymongo import ASCENDING, MongoClient
 from pymongo.errors import PyMongoError
@@ -37,30 +38,36 @@ class MongoOrderRepository(OrderRepository):
     alphabétique est leur ordre de création, ce qui permet l'import incrémental.
     """
 
-    def __init__(self, uri, database="livraison_express", collection="orders", timeout_ms=5000):
+    def __init__(
+        self,
+        uri: str,
+        database: str = "livraison_express",
+        collection: str = "orders",
+        timeout_ms: int = 5000,
+    ) -> None:
         self._client = MongoClient(uri, serverSelectionTimeoutMS=timeout_ms, tz_aware=True)
         self._collection = self._client[database][collection]
 
-    def save(self, order):
+    def save(self, order: OrderEntity) -> Never:
         raise ReadOnlyRepositoryError(
             "La base de l'ERP est en lecture seule : l'application n'y écrit jamais (ADR-0007)."
         )
 
-    def get(self, order_id):
+    def get(self, order_id: str) -> OrderEntity | None:
         with _domain_errors():
             document = self._collection.find_one({"order_id": order_id}, NO_ID)
         return None if document is None else self._to_entity(document)
 
-    def get_all(self):
+    def get_all(self) -> list[OrderEntity]:
         with _domain_errors():
             documents = list(self._collection.find({}, NO_ID).sort("order_id", ASCENDING))
         return [self._to_entity(document) for document in documents]
 
-    def count(self):
+    def count(self) -> int:
         with _domain_errors():
             return self._collection.count_documents({})
 
-    def get_training_data(self):
+    def get_training_data(self) -> tuple[list[OrderEntity], list[int]]:
         query = {TARGET_COLUMN: {"$in": [0, 1]}}
         with _domain_errors():
             documents = list(self._collection.find(query, NO_ID).sort("order_id", ASCENDING))
@@ -69,7 +76,9 @@ class MongoOrderRepository(OrderRepository):
             [int(document[TARGET_COLUMN]) for document in documents],
         )
 
-    def get_labeled_after(self, last_order_id, limit):
+    def get_labeled_after(
+        self, last_order_id: str | None, limit: int
+    ) -> list[tuple[OrderEntity, int | None]]:
         query = {"order_id": {"$gt": last_order_id}} if last_order_id else {}
         with _domain_errors():
             documents = list(
@@ -77,25 +86,25 @@ class MongoOrderRepository(OrderRepository):
             )
         return [(self._to_entity(document), self._label(document)) for document in documents]
 
-    def ping(self):
+    def ping(self) -> bool:
         try:
             self._client.admin.command("ping")
         except PyMongoError:
             return False
         return True
 
-    def close(self):
+    def close(self) -> None:
         """Ferme les connexions au serveur MongoDB."""
         self._client.close()
 
     @staticmethod
-    def _label(document):
+    def _label(document: Mapping[str, Any]) -> int | None:
         """Cible du document : 0, 1, ou None si elle est absente (anciennes commandes)."""
         label = document.get(TARGET_COLUMN)
         return None if label is None else int(label)
 
     @staticmethod
-    def _to_entity(document):
+    def _to_entity(document: Mapping[str, Any]) -> OrderEntity:
         """Document MongoDB -> OrderEntity (champs du domaine seulement, dates en UTC).
 
         Pas de validation ici : un document incomplet ou invalide est signalé par

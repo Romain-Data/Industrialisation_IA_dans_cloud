@@ -23,6 +23,7 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 
+from src.domain.classifier import Classifier
 from src.domain.features import FEATURE_COLUMNS, TARGET_COLUMN
 
 ID_COLUMN = "order_id"
@@ -32,13 +33,13 @@ HOLDOUT_PERCENT = 20
 EVALUATION_PROTOCOL = f"sha256-{ID_COLUMN}-{HOLDOUT_PERCENT}pct"
 
 
-def is_holdout(order_id):
+def is_holdout(order_id: object) -> bool:
     """Vrai si la commande appartient au jeu d'évaluation (stable dans le temps)."""
     digest = hashlib.sha256(str(order_id).encode()).hexdigest()
     return int(digest[:8], 16) % 100 < HOLDOUT_PERCENT
 
 
-def split_holdout(df):
+def split_holdout(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Sépare les commandes d'entraînement et d'évaluation ; retourne (train, holdout)."""
     if ID_COLUMN not in df.columns:
         raise ValueError(f"Colonne {ID_COLUMN} absente : impossible de fixer le jeu d'évaluation.")
@@ -55,17 +56,17 @@ def split_holdout(df):
     return train, holdout
 
 
-def evaluate(model, holdout: pd.DataFrame):
+def evaluate(model: Classifier, holdout: pd.DataFrame) -> dict[str, float]:
     """Métriques d'un modèle sur le jeu d'évaluation."""
     y_true = holdout[TARGET_COLUMN]
     y_proba = model.predict_proba(holdout[FEATURE_COLUMNS])[:, 1]
     y_pred = (y_proba >= 0.5).astype(int)
     return {
-        "accuracy": accuracy_score(y_true, y_pred),
-        "precision": precision_score(y_true, y_pred, zero_division=0),
-        "recall": recall_score(y_true, y_pred, zero_division=0),
-        "f1_score": f1_score(y_true, y_pred, zero_division=0),
-        "roc_auc": roc_auc_score(y_true, y_proba),
+        "accuracy": float(accuracy_score(y_true, y_pred)),
+        "precision": float(precision_score(y_true, y_pred, zero_division=0)),
+        "recall": float(recall_score(y_true, y_pred, zero_division=0)),
+        "f1_score": float(f1_score(y_true, y_pred, zero_division=0)),
+        "roc_auc": float(roc_auc_score(y_true, y_proba)),
     }
 
 
@@ -88,21 +89,23 @@ MIN_SEGMENT_ROWS = 50
 MAX_POSITIVE_RATE_SHIFT = 0.05
 
 
-def _positive_rate(model, holdout):
+def _positive_rate(model: Classifier, holdout: pd.DataFrame) -> float:
     return float((model.predict_proba(holdout[FEATURE_COLUMNS])[:, 1] >= 0.5).mean())
 
 
-def _segment_auc(model, holdout, column):
+def _segment_auc(model: Classifier, holdout: pd.DataFrame, column: str) -> dict[str, float]:
     """ROC AUC par valeur de `column`, pour les segments assez grands et avec deux classes."""
-    scores = {}
+    scores: dict[str, float] = {}
     for value, segment in holdout.groupby(column):
         if len(segment) >= MIN_SEGMENT_ROWS and segment[TARGET_COLUMN].nunique() == 2:
             proba = model.predict_proba(segment[FEATURE_COLUMNS])[:, 1]
-            scores[value] = roc_auc_score(segment[TARGET_COLUMN], proba)
+            scores[str(value)] = float(roc_auc_score(segment[TARGET_COLUMN], proba))
     return scores
 
 
-def guardrail_failures(candidate, champion, holdout):
+def guardrail_failures(
+    candidate: Classifier, champion: Classifier | None, holdout: pd.DataFrame
+) -> list[str]:
     """Garde-fous métier violés par le candidat ; liste vide si tout passe.
 
     Sans champion comparable (`champion` à None), seul le seuil absolu de précision

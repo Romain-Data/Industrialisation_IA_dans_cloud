@@ -44,6 +44,14 @@ default-groups = ["dev", "orchestration"]
 # Simulateur ERP : code fourni par le cours, système externe à l'application.
 extend-exclude = ["*.ipynb", "erp_simulator"]
 
+[tool.ruff.lint]
+# Typage obligatoire des fonctions (Clean Code, barème) : paramètres et retours.
+# Les tests en sont dispensés (fixtures pytest, fonctions de test sans retour).
+extend-select = ["ANN"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["ANN"]
+
 [tool.ruff.lint.flake8-bugbear]
 # Injection de dépendances FastAPI : Depends() en valeur par défaut est voulu.
 extend-immutable-calls = ["fastapi.Depends"]

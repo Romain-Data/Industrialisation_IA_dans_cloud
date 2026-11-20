@@ -12,7 +12,7 @@ from src.domain.eligibility import eligibility_probability
 class CollectDev(Collect):
     """Générateur de commandes synthétiques étiquetées par la règle de calcul du notebook."""
 
-    def collect_data(self, n_rows=6000, random_state=42):
+    def collect_data(self, n_rows: int = 6000, random_state: int = 42) -> pd.DataFrame:
         """
         Génère un jeu de données fictif représentant des commandes.
         Le jeu de données est volontairement synthétique afin que le notebook

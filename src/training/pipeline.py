@@ -1,5 +1,7 @@
 """Pipeline d'entraînement : collecte, validation, nettoyage, entraînement, promotion."""
 
+from sklearn.pipeline import Pipeline
+
 from src.abstraction.collect import Collect
 from src.config import (
     CHAMPION_ALIAS,
@@ -15,7 +17,7 @@ from src.training.registry import promote_if_better
 from src.training.train import train_model
 
 
-def run_training(collector: Collect):
+def run_training(collector: Collect) -> tuple[Pipeline, dict[str, float], str]:
     """Collecte, nettoie puis valide les données, entraîne et promeut le modèle.
 
     La structure est vérifiée avant le nettoyage ; le nettoyage écarte les lignes
@@ -48,7 +50,7 @@ def run_training(collector: Collect):
     return model_pipeline, metrics, run_id
 
 
-def build_collector(source=None):
+def build_collector(source: str | None = None) -> Collect:
     """Choisit la source d'entraînement (variable TRAINING_SOURCE)."""
     source = source or TRAINING_SOURCE
 

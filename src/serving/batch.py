@@ -1,15 +1,21 @@
 """Prédiction par lot sur un DataFrame de commandes, avec export CSV."""
 
+from pathlib import Path
+
 import numpy as np
+import pandas as pd
 
 from src.config import ARTIFACTS_DIR, DEFAULT_THRESHOLD
+from src.domain.classifier import Classifier
 from src.domain.features import FEATURE_COLUMNS
 from src.domain.validation import validate_order
 
 PREDICTIONS_FILENAME = "batch_predictions.csv"
 
 
-def batch_predict_orders(input_df, model, threshold=DEFAULT_THRESHOLD):
+def batch_predict_orders(
+    input_df: pd.DataFrame, model: Classifier, threshold: float = DEFAULT_THRESHOLD
+) -> pd.DataFrame:
     """
     Réalise une prédiction batch sur plusieurs commandes.
     """
@@ -33,7 +39,7 @@ def batch_predict_orders(input_df, model, threshold=DEFAULT_THRESHOLD):
     return result
 
 
-def save_batch_predictions(predictions, artifacts_dir=ARTIFACTS_DIR):
+def save_batch_predictions(predictions: pd.DataFrame, artifacts_dir: Path = ARTIFACTS_DIR) -> Path:
     """Écrit les prédictions batch au format CSV et retourne le chemin."""
     artifacts_dir.mkdir(exist_ok=True)
     predictions_path = artifacts_dir / PREDICTIONS_FILENAME

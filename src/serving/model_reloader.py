@@ -9,6 +9,7 @@ service est conservé.
 
 import logging
 import threading
+from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -16,15 +17,20 @@ logger = logging.getLogger(__name__)
 class ModelReloader:
     """Thread qui recharge le modèle quand la version du champion change."""
 
-    def __init__(self, read_version, reload, interval_seconds):
+    def __init__(
+        self,
+        read_version: Callable[[], str | None],
+        reload: Callable[[], None],
+        interval_seconds: float,
+    ) -> None:
         self._read_version = read_version
         self._reload = reload
         self._interval = interval_seconds
         self._stop = threading.Event()
-        self._thread = None
-        self.current_version = None
+        self._thread: threading.Thread | None = None
+        self.current_version: str | None = None
 
-    def check_once(self):
+    def check_once(self) -> bool:
         """Recharge si le champion a changé. Retourne True s'il y a eu rechargement."""
         try:
             version = self._read_version()
@@ -40,7 +46,7 @@ class ModelReloader:
         self.current_version = version
         return True
 
-    def start(self, current_version):
+    def start(self, current_version: str | None) -> None:
         """Démarre la surveillance (désactivée si l'intervalle vaut 0)."""
         self.current_version = current_version
         if self._interval <= 0:
@@ -48,12 +54,12 @@ class ModelReloader:
         self._thread = threading.Thread(target=self._run, name="model-reloader", daemon=True)
         self._thread.start()
 
-    def stop(self):
+    def stop(self) -> None:
         """Arrête la surveillance."""
         self._stop.set()
         if self._thread is not None:
             self._thread.join(timeout=2)
 
-    def _run(self):
+    def _run(self) -> None:
         while not self._stop.wait(self._interval):
             self.check_once()

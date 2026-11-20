@@ -5,7 +5,7 @@ import pandas as pd
 from src.domain.features import CATEGORY_VALUES
 
 
-def clean_orders_data(df):
+def clean_orders_data(df: pd.DataFrame) -> pd.DataFrame:
     """
     Nettoyage automatique des données.
     Cette fonction devra ensuite être utilisée dans la pipeline ETL.
