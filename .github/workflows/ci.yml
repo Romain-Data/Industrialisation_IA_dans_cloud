@@ -1,6 +1,6 @@
 # CI/CD (ADR-0004) : construire une fois, vérifier en préprod, promouvoir en prod.
 #
-#   branche ─push─▶ checks : ruff, pylint, pytest (+ MongoDB), version libre (PR vers main)
+#   branche ─push─▶ checks : ruff, pylint, pytest (+ MongoDB, RabbitMQ), version libre (PR vers main)
 #      │ PR vers develop (checks obligatoires)
 #   develop ─▶ build : images api + orchestrator (sha-xxxxxxx), test de démarrage, Trivy, GHCR
 #           ─▶ deploy-preprod : Coolify (attente du résultat) + tests de fumée complets
@@ -46,8 +46,23 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      # RabbitMQ réel pour tester la file des commandes et la diffusion (ADR-0013).
+      # Broker jetable : mot de passe dérivé du run, jamais écrit en clair.
+      rabbitmq:
+        image: rabbitmq:4-alpine
+        ports:
+          - 5672:5672
+        env:
+          RABBITMQ_DEFAULT_USER: ci
+          RABBITMQ_DEFAULT_PASS: run-${{ github.run_id }}-${{ github.run_attempt }}
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 5s
+          --health-timeout 10s
+          --health-retries 20
     env:
       MONGO_TEST_URI: mongodb://localhost:27017
+      RABBITMQ_TEST_URL: amqp://ci:run-${{ github.run_id }}-${{ github.run_attempt }}@localhost:5672/%2F
     steps:
       - uses: actions/checkout@v7
         with:
@@ -284,3 +299,9 @@ jobs:
 
       - name: Check de santé en prod (lecture seule)
         run: python3 scripts/smoke_test.py "${{ vars.APP_URL }}" --mode readonly
+
+      # Orchestrateur Prefect (prod uniquement, ADR-0009) : même version que l'API, déployé
+      # une fois l'API vérifiée. Pas de health check HTTP : « finished » = conteneur démarré.
+      - name: Déployer l'orchestrateur Prefect
+        if: vars.COOLIFY_ORCHESTRATOR_UUID != ''
+        run: python3 scripts/coolify_deploy.py "${{ vars.COOLIFY_ORCHESTRATOR_UUID }}" "$IMAGE_NAME-orchestrator" "${{ needs.promote.outputs.version }}"

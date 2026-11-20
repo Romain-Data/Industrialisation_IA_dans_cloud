@@ -8,6 +8,7 @@ le lac : les commandes elles-mêmes restent dans la base transactionnelle.
 from pathlib import Path
 
 import duckdb
+import pandas as pd
 from sqlalchemy.engine import make_url
 
 from src.abstraction.training_snapshot import TrainingSnapshotStore
@@ -15,7 +16,7 @@ from src.abstraction.training_snapshot import TrainingSnapshotStore
 TABLE = "commandes_entrainement"
 
 
-def ducklake_catalog(catalog_url):
+def ducklake_catalog(catalog_url: str) -> tuple[str, str]:
     """Convertit une URL SQLAlchemy en chaîne de catalogue DuckLake.
 
     sqlite:///chemin.sqlite                      -> sqlite:chemin.sqlite
@@ -40,17 +41,17 @@ def ducklake_catalog(catalog_url):
     raise ValueError(f"Catalogue DuckLake non supporté : {url.drivername}")
 
 
-def _quote(value):
+def _quote(value: object) -> str:
     return "'" + str(value).replace("'", "''") + "'"
 
 
 class DuckLakeSnapshotStore(TrainingSnapshotStore):
     """Snapshots d'entraînement DuckLake : une écriture = une version relisible (time travel)."""
-    def __init__(self, catalog_url, data_path):
+    def __init__(self, catalog_url: str, data_path: str | Path) -> None:
         self._extension, self._catalog = ducklake_catalog(catalog_url)
         self._data_path = str(data_path).rstrip("/") + "/"
 
-    def _connect(self):
+    def _connect(self) -> duckdb.DuckDBPyConnection:
         Path(self._data_path).mkdir(parents=True, exist_ok=True)
         connection = duckdb.connect()
         # Extensions préinstallées dans l'image Docker ; téléchargées au premier usage en dev.
@@ -63,7 +64,7 @@ class DuckLakeSnapshotStore(TrainingSnapshotStore):
         )
         return connection
 
-    def _table_exists(self, connection):
+    def _table_exists(self, connection: duckdb.DuckDBPyConnection) -> bool:
         return bool(
             connection.execute(
                 "SELECT count(*) FROM duckdb_tables() "
@@ -72,7 +73,7 @@ class DuckLakeSnapshotStore(TrainingSnapshotStore):
             ).fetchone()[0]
         )
 
-    def write(self, orders):
+    def write(self, orders: pd.DataFrame) -> int:
         if orders.empty:
             raise ValueError("Aucune commande à historiser.")
 
@@ -92,7 +93,7 @@ class DuckLakeSnapshotStore(TrainingSnapshotStore):
         finally:
             connection.close()
 
-    def read(self, version=None):
+    def read(self, version: int | None = None) -> pd.DataFrame:
         connection = self._connect()
         try:
             if not self._table_exists(connection):
@@ -103,7 +104,7 @@ class DuckLakeSnapshotStore(TrainingSnapshotStore):
         finally:
             connection.close()
 
-    def versions(self):
+    def versions(self) -> list[int]:
         connection = self._connect()
         try:
             rows = connection.execute(
@@ -115,5 +116,5 @@ class DuckLakeSnapshotStore(TrainingSnapshotStore):
             connection.close()
 
     @staticmethod
-    def _latest_version(connection):
+    def _latest_version(connection: duckdb.DuckDBPyConnection) -> int:
         return connection.execute("SELECT max(snapshot_id) FROM lake.snapshots()").fetchone()[0]

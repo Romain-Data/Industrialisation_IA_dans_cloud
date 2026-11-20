@@ -17,11 +17,12 @@ import os
 import sys
 import time
 import urllib.request
+from typing import Any
 
 FINAL_STATES = {"finished", "failed", "cancelled-by-user"}
 
 
-def api(method, path, body=None):
+def api(method: str, path: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
     """Appel de l'API Coolify (les réponses peuvent contenir des caractères de contrôle)."""
     base = os.environ["COOLIFY_URL"].rstrip("/")
     request = urllib.request.Request(
@@ -39,7 +40,7 @@ def api(method, path, body=None):
     return json.loads(raw, strict=False) if raw else {}
 
 
-def deploy(app_uuid, image, tag, timeout):
+def deploy(app_uuid: str, image: str, tag: str, timeout: int) -> str | None:
     """Déploie et retourne l'état final du déploiement."""
     api("PATCH", f"/applications/{app_uuid}",
         {"docker_registry_image_name": image, "docker_registry_image_tag": tag})
@@ -59,7 +60,7 @@ def deploy(app_uuid, image, tag, timeout):
     return status
 
 
-def main():
+def main() -> int:
     """Point d'entrée en ligne de commande."""
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     parser.add_argument("app_uuid")

@@ -1,6 +1,7 @@
 """Contrat de stockage de nos propres commandes et prédictions (ADR-0001)."""
 
 from abc import ABC, abstractmethod
+from typing import Any
 
 import pandas as pd
 
@@ -13,15 +14,15 @@ class OrderStore(ABC):
     """Stockage de nos commandes, de leur résultat réel et de leurs prédictions."""
 
     @abstractmethod
-    def save(self, order: dict) -> None:
+    def save(self, order: dict[str, Any]) -> None:
         """Enregistre une commande. Lève DuplicateOrderError si order_id existe."""
 
     @abstractmethod
-    def get(self, order_id: str) -> dict | None:
+    def get(self, order_id: str) -> dict[str, Any] | None:
         """Retourne la commande, ou None si elle est inconnue."""
 
     @abstractmethod
-    def record_outcome(self, order_id: str, express_eligible: bool) -> dict | None:
+    def record_outcome(self, order_id: str, express_eligible: bool) -> dict[str, Any] | None:
         """Enregistre le résultat observé d'une commande (cible d'entraînement).
 
         Retourne le résultat enregistré, ou None si la commande est inconnue.
@@ -39,7 +40,7 @@ class OrderStore(ABC):
         """Nombre de commandes dont le résultat réel (la cible) est connu."""
 
     @abstractmethod
-    def import_orders(self, orders: list[dict]) -> int:
+    def import_orders(self, orders: list[dict[str, Any]]) -> int:
         """Insère des commandes importées, en ignorant celles déjà présentes (même order_id).
 
         Chaque commande porte ses caractéristiques, `created_at` (date de la source) et
@@ -59,9 +60,13 @@ class OrderStore(ABC):
         """Indique si le schéma du stockage est à jour des migrations."""
 
     @abstractmethod
-    def save_prediction(self, prediction: dict) -> None:
+    def save_prediction(self, prediction: dict[str, Any]) -> None:
         """Enregistre (ou remplace) la prédiction d'une commande."""
 
     @abstractmethod
-    def get_prediction(self, order_id: str) -> dict | None:
+    def get_prediction(self, order_id: str) -> dict[str, Any] | None:
         """Retourne la prédiction de la commande, ou None si elle n'existe pas."""
+
+    @abstractmethod
+    def recent_predictions(self, limit: int) -> list[dict[str, Any]]:
+        """Retourne les `limit` dernières prédictions, de la plus récente à la plus ancienne."""

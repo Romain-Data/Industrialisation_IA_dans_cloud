@@ -2,6 +2,8 @@
 
 from abc import ABC, abstractmethod
 
+from src.domain.entities import ImportReport
+
 
 class ImportJournal(ABC):
     """Journal des imports d'une source de commandes."""
@@ -11,5 +13,5 @@ class ImportJournal(ABC):
         """Identifiant de la dernière commande lue au dernier import de `source` (None sinon)."""
 
     @abstractmethod
-    def record(self, source: str, report) -> None:
+    def record(self, source: str, report: ImportReport) -> None:
         """Enregistre le compte rendu d'un import (ImportReport)."""

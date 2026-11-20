@@ -1,5 +1,7 @@
 """Pipeline d'entraînement : collecte, validation, nettoyage, entraînement, promotion."""
 
+from sklearn.pipeline import Pipeline
+
 from src.abstraction.collect import Collect
 from src.config import (
     CHAMPION_ALIAS,
@@ -9,12 +11,13 @@ from src.config import (
     TRAINING_SOURCE,
 )
 from src.domain.cleaning import clean_orders_data
+from src.domain.evaluation import split_holdout
 from src.domain.validation import validate_columns, validate_dataset
 from src.training.registry import promote_if_better
 from src.training.train import train_model
 
 
-def run_training(collector: Collect):
+def run_training(collector: Collect) -> tuple[Pipeline, dict[str, float], str]:
     """Collecte, nettoie puis valide les données, entraîne et promeut le modèle.
 
     La structure est vérifiée avant le nettoyage ; le nettoyage écarte les lignes
@@ -30,18 +33,24 @@ def run_training(collector: Collect):
         print(f"Nettoyage : {dropped} lignes écartées sur {len(raw_orders)}.")
 
     params = {**(getattr(collector, "tracking_params", None) or {}), "rows_dropped": dropped}
-    model_pipeline, metrics, run_id = train_model(orders_clean, params=params)
-    promoted = promote_if_better(run_id)
+    # Même jeu d'évaluation pour le candidat et le champion (src/domain/evaluation.py).
+    train, holdout = split_holdout(orders_clean)
+    model_pipeline, metrics, run_id = train_model(train, holdout, params=params)
+    decision = promote_if_better(run_id, holdout)
 
     print("Entraînement terminé.")
     print(f"Run MLflow : {run_id}")
-    print(f"Alias {CHAMPION_ALIAS} {'déplacé' if promoted else 'inchangé'}")
+    print(f"Décision de promotion : {decision}" + {
+        "champion": f" (alias {CHAMPION_ALIAS} déplacé)",
+        "challenger": " (garde-fou métier violé : décision humaine attendue, ADR-0010)",
+        "rejected": f" (pas meilleur que le {CHAMPION_ALIAS})",
+    }[decision])
     print(f"Métriques : {metrics}")
 
     return model_pipeline, metrics, run_id
 
 
-def build_collector(source=None):
+def build_collector(source: str | None = None) -> Collect:
     """Choisit la source d'entraînement (variable TRAINING_SOURCE)."""
     source = source or TRAINING_SOURCE
 

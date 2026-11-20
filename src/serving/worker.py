@@ -2,9 +2,16 @@
 
 import logging
 import threading
+import uuid
+from collections.abc import Callable
+from datetime import UTC, datetime
+from typing import Any
 
 from src.abstraction.order_queue import OrderQueue
 from src.abstraction.order_store import OrderStore
+from src.abstraction.prediction_events import PredictionEvents
+from src.domain.classifier import Classifier
+from src.serving.schemas import Prediction, PredictionEvent
 from src.serving.service import compute_prediction
 
 logger = logging.getLogger(__name__)
@@ -13,14 +20,21 @@ logger = logging.getLogger(__name__)
 class OrderWorker:
     """Consomme les événements de commande et enregistre leur prédiction."""
 
-    def __init__(self, order_queue: OrderQueue, order_store: OrderStore, get_model):
+    def __init__(
+        self,
+        order_queue: OrderQueue,
+        order_store: OrderStore,
+        get_model: Callable[[], Classifier | None],
+        prediction_events: PredictionEvents | None = None,
+    ) -> None:
         self._queue = order_queue
+        self._events = prediction_events
         self._store = order_store
         self._get_model = get_model
         self._stop = threading.Event()
-        self._thread = None
+        self._thread: threading.Thread | None = None
 
-    def process_one(self, timeout=0.0):
+    def process_one(self, timeout: float = 0.0) -> bool:
         """Traite au plus un événement. Retourne False si la file est vide."""
         event = self._queue.consume(timeout)
 
@@ -30,7 +44,7 @@ class OrderWorker:
         self._handle(event)
         return True
 
-    def _handle(self, event):
+    def _handle(self, event: dict[str, Any]) -> None:
         order = dict(event["order"])
         order_id = order.pop("order_id")
         model = self._get_model()
@@ -46,27 +60,43 @@ class OrderWorker:
             return
 
         self._store.save_prediction(prediction)
+        self._announce(prediction)
 
-    def _run(self):
+    def _announce(self, prediction: dict[str, Any]) -> None:
+        """Diffuse la prédiction enregistrée (page du logisticien, ADR-0013)."""
+        if self._events is None:
+            return
+        event = PredictionEvent(
+            event_id=str(uuid.uuid4()),
+            event_type="prediction.created",
+            occurred_at=datetime.now(UTC),
+            prediction=Prediction(**prediction),
+        )
+        try:
+            self._events.publish(event.model_dump(mode="json"))
+        except Exception:  # la prédiction est en base : seule la notification est perdue
+            logger.exception("Prédiction %s non diffusée.", prediction["order_id"])
+
+    def _run(self) -> None:
         while not self._stop.is_set():
             try:
                 self.process_one(timeout=0.2)
             except Exception:
                 logger.exception("Erreur inattendue dans le worker.")
 
-    def start(self):
+    def start(self) -> None:
         """Démarre le thread du worker (thread démon, arrêté avec l'API)."""
         self._stop.clear()
         self._thread = threading.Thread(target=self._run, name="order-worker", daemon=True)
         self._thread.start()
 
-    def stop(self):
+    def stop(self) -> None:
         """Demande l'arrêt du worker et attend la fin du traitement en cours (2 s au plus)."""
         self._stop.set()
 
         if self._thread is not None:
             self._thread.join(timeout=2)
 
-    def is_alive(self):
+    def is_alive(self) -> bool:
         """Indique si le thread du worker tourne (utilisé par /health/ready)."""
         return self._thread is not None and self._thread.is_alive()

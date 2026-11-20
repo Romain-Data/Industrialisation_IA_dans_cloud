@@ -1,6 +1,7 @@
 """Stockage SQLAlchemy des commandes et prédictions (SQLite en dev, PostgreSQL en prod)."""
 
 from datetime import UTC, datetime
+from typing import Any
 
 import pandas as pd
 from sqlalchemy import (
@@ -98,11 +99,11 @@ class PredictionRecord(Base):
 class SqlAlchemyOrderStore(OrderStore):
     """Implémentation SQLAlchemy, valable pour SQLite (dev) et PostgreSQL (prod)."""
 
-    def __init__(self, database_url):
+    def __init__(self, database_url: str) -> None:
         # Le schéma est créé par Alembic (alembic upgrade head), pas ici.
         self._engine = create_engine(database_url)
 
-    def save(self, order):
+    def save(self, order: dict[str, Any]) -> None:
         record = OrderRecord(**order)
 
         with Session(self._engine) as session:
@@ -115,7 +116,7 @@ class SqlAlchemyOrderStore(OrderStore):
                     raise DuplicateOrderError(order["order_id"]) from error
                 raise
 
-    def get(self, order_id):
+    def get(self, order_id: str) -> dict[str, Any] | None:
         with Session(self._engine) as session:
             record = session.get(OrderRecord, order_id)
 
@@ -127,7 +128,7 @@ class SqlAlchemyOrderStore(OrderStore):
                 for column in ["order_id", *FEATURE_COLUMNS]
             }
 
-    def record_outcome(self, order_id, express_eligible):
+    def record_outcome(self, order_id: str, express_eligible: bool) -> dict[str, Any] | None:
         with Session(self._engine) as session:
             record = session.get(OrderRecord, order_id)
 
@@ -144,7 +145,7 @@ class SqlAlchemyOrderStore(OrderStore):
                 "recorded_at": _as_utc(record.outcome_recorded_at),
             }
 
-    def export_labeled_orders(self):
+    def export_labeled_orders(self) -> pd.DataFrame:
         columns = [
             OrderRecord.order_id,
             OrderRecord.created_at.label("order_date"),
@@ -164,12 +165,12 @@ class SqlAlchemyOrderStore(OrderStore):
         orders["order_date"] = pd.to_datetime(orders["order_date"], utc=True).dt.tz_localize(None)
         return orders
 
-    def count_labeled_orders(self):
+    def count_labeled_orders(self) -> int:
         query = select(func.count()).where(OrderRecord.express_eligible.is_not(None))
         with self._engine.connect() as connection:
             return connection.execute(query).scalar()
 
-    def import_orders(self, orders):
+    def import_orders(self, orders: list[dict[str, Any]]) -> int:
         if not orders:
             return 0
 
@@ -185,12 +186,12 @@ class SqlAlchemyOrderStore(OrderStore):
         with self._engine.begin() as connection:
             return connection.execute(statement).rowcount
 
-    def last_order_id(self, prefix):
+    def last_order_id(self, prefix: str) -> str | None:
         query = select(func.max(OrderRecord.order_id)).where(OrderRecord.order_id.like(f"{prefix}%"))
         with self._engine.connect() as connection:
             return connection.execute(query).scalar()
 
-    def ping(self):
+    def ping(self) -> bool:
         try:
             with self._engine.connect() as connection:
                 connection.execute(text("SELECT 1"))
@@ -199,34 +200,46 @@ class SqlAlchemyOrderStore(OrderStore):
 
         return True
 
-    def save_prediction(self, prediction):
+    def save_prediction(self, prediction: dict[str, Any]) -> None:
         with Session(self._engine) as session:
             session.merge(PredictionRecord(**prediction))
             session.commit()
 
-    def get_prediction(self, order_id):
+    def get_prediction(self, order_id: str) -> dict[str, Any] | None:
         with Session(self._engine) as session:
             record = session.get(PredictionRecord, order_id)
 
             if record is None:
                 return None
 
-            prediction = {
-                column.name: getattr(record, column.name)
-                for column in PredictionRecord.__table__.columns
-            }
+            return _prediction_dict(record)
 
-            prediction["predicted_at"] = _as_utc(prediction["predicted_at"])
-            return prediction
+    def recent_predictions(self, limit: int) -> list[dict[str, Any]]:
+        query = (
+            select(PredictionRecord)
+            .order_by(PredictionRecord.predicted_at.desc(), PredictionRecord.order_id.desc())
+            .limit(limit)
+        )
+        with Session(self._engine) as session:
+            return [_prediction_dict(record) for record in session.scalars(query)]
 
-    def schema_is_current(self):
+    def schema_is_current(self) -> bool:
         try:
             return current_revision(self._engine) == head_revision()
         except Exception:  # noqa: BLE001 - sonde de santé : toute erreur = schéma non vérifiable
             return False
 
 
-def _as_utc(value):
+def _prediction_dict(record: PredictionRecord) -> dict[str, Any]:
+    """Ligne de la table des prédictions -> dictionnaire au format du contrat Prediction."""
+    prediction = {
+        column.name: getattr(record, column.name) for column in PredictionRecord.__table__.columns
+    }
+    prediction["predicted_at"] = _as_utc(prediction["predicted_at"])
+    return prediction
+
+
+def _as_utc(value: datetime | None) -> datetime | None:
     """SQLite ne conserve pas le fuseau horaire : les dates relues sont en UTC."""
     if value is not None and value.tzinfo is None:
         return value.replace(tzinfo=UTC)

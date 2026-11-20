@@ -5,7 +5,8 @@ ses caractéristiques. La cible (`express_eligible`) n'en fait pas partie : on n
 prédit pas ce qu'on connaît ; elle est fournie à part pour l'entraînement.
 """
 
-from dataclasses import dataclass
+from collections import Counter
+from dataclasses import dataclass, field
 from datetime import datetime
 
 
@@ -28,3 +29,18 @@ class OrderEntity:
     order_id: str | None = None
     # Absente de la correction : la date de commande de l'ERP (utile à l'entraînement).
     order_date: datetime | None = None
+
+
+@dataclass
+class ImportReport:
+    """Compte rendu d'un import."""
+
+    started_at: datetime
+    finished_at: datetime | None = None
+    last_order_id: str | None = None
+    read: int = 0
+    imported: int = 0
+    already_present: int = 0
+    rejected: int = 0
+    unlabeled: int = 0
+    rejection_reasons: Counter[str] = field(default_factory=Counter)

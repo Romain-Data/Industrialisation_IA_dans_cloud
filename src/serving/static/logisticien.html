@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Poste logisticien — livraison express</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #1f2a37; --muted: #5b6675; --line: #e3e7ec;
+    --express: #1f8a5b; --express-bg: #e8f6ef; --standard: #6b7685; --standard-bg: #f0f2f5;
+    --accent: #2f6fb0; --warn: #b54708; --off: #9aa4b2;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Inter, "Segoe UI", Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+           padding: 18px 28px; background: var(--card); border-bottom: 1px solid var(--line); }
+  h1 { font-size: 20px; margin: 0; }
+  .subtitle { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .shift { display: flex; align-items: center; gap: 14px; }
+  .switch { position: relative; width: 52px; height: 28px; flex: none; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider { position: absolute; inset: 0; background: var(--off); border-radius: 28px; cursor: pointer; transition: .2s; }
+  .slider::before { content: ""; position: absolute; width: 22px; height: 22px; left: 3px; top: 3px;
+                    background: #fff; border-radius: 50%; transition: .2s; }
+  .switch input:checked + .slider { background: var(--express); }
+  .switch input:checked + .slider::before { transform: translateX(24px); }
+  .switch input:disabled + .slider { opacity: .6; cursor: wait; }
+  .shift-label { font-weight: 600; font-size: 15px; }
+  .shift-detail { font-size: 12px; color: var(--muted); }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--off); margin-right: 6px; }
+  .dot.live { background: var(--express); box-shadow: 0 0 0 4px rgba(31, 138, 91, .15); }
+  main { max-width: 980px; margin: 24px auto; padding: 0 20px; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .stat .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat .value { font-size: 28px; font-weight: 700; margin-top: 4px; }
+  .stat.express .value { color: var(--express); }
+  .stat.todo .value { color: var(--warn); }
+  .toolbar { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; align-items: center; }
+  .toolbar label { font-size: 14px; display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+  button { font: inherit; font-size: 14px; border-radius: 8px; padding: 8px 14px; cursor: pointer;
+           border: 1px solid var(--line); background: var(--card); color: var(--text); }
+  button:disabled { opacity: .55; cursor: default; }
+  button.done { font-size: 13px; padding: 6px 12px; border-color: var(--express); color: var(--express); font-weight: 600; }
+  button.done:hover { background: var(--express-bg); }
+  ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  li { display: grid; grid-template-columns: 100px 1fr 160px 80px 100px; align-items: center; gap: 14px;
+       background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; }
+  li.express { border-left: 5px solid var(--express); }
+  li.standard { opacity: .75; }
+  li.new { animation: flash 1.6s ease-out; }
+  @keyframes flash { from { background: #fff7d6; } to { background: var(--card); } }
+  .hide-standard li.standard { display: none; }
+  .badge { font-size: 12px; font-weight: 700; border-radius: 999px; padding: 4px 10px; text-align: center; }
+  .badge.express { background: var(--express-bg); color: var(--express); }
+  .badge.standard { background: var(--standard-bg); color: var(--standard); }
+  .order { font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+  .meta { font-size: 12px; color: var(--muted); }
+  .bar { height: 8px; background: var(--standard-bg); border-radius: 4px; overflow: hidden; }
+  .bar > span { display: block; height: 100%; background: var(--accent); }
+  .proba { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .time { font-size: 12px; color: var(--muted); text-align: right; }
+  .empty { display: block; color: var(--muted); text-align: center; padding: 30px; background: none; border: none; }
+  #toasts { position: fixed; right: 20px; bottom: 20px; display: grid; gap: 8px; z-index: 10; }
+  .toast { background: var(--express); color: #fff; padding: 12px 16px; border-radius: 10px; font-size: 14px;
+           box-shadow: 0 6px 20px rgba(0, 0, 0, .15); }
+  .toast.error { background: var(--warn); }
+  @media (max-width: 720px) { li { grid-template-columns: 1fr 1fr; } .stats { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Poste logisticien — livraison express</h1>
+    <div class="subtitle">Les nouvelles commandes de l'ERP sont prédites à leur arrivée ; les commandes éligibles à l'express vous sont notifiées.</div>
+  </div>
+  <div class="shift">
+    <label class="switch" title="Activer ou couper le flux des commandes de l'ERP">
+      <input type="checkbox" id="stream">
+      <span class="slider"></span>
+    </label>
+    <div>
+      <div class="shift-label" id="stream-label">Prendre mon poste</div>
+      <div class="shift-detail"><span id="dot" class="dot"></span><span id="stream-detail">Flux ERP coupé</span></div>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="stats">
+    <div class="stat"><div class="label">Commandes reçues</div><div class="value" id="count-all">0</div></div>
+    <div class="stat express"><div class="label">Éligibles express</div><div class="value" id="count-express">0</div></div>
+    <div class="stat todo"><div class="label">Express à traiter</div><div class="value" id="count-todo">0</div></div>
+  </section>
+
+  <div class="toolbar">
+    <label><input type="checkbox" id="show-standard"> Afficher aussi les commandes standard</label>
+    <button id="clear">Vider la liste</button>
+    <button id="notify">Activer les notifications du navigateur</button>
+  </div>
+
+  <ul id="list" class="hide-standard"><li class="empty" id="empty">Activez le flux pour recevoir les commandes.</li></ul>
+</main>
+
+<div id="toasts"></div>
+
+<script>
+  const MAX_ROWS = 200;
+  let total = 0, express = 0, todo = 0, source = null;
+
+  const $ = (id) => document.getElementById(id);
+  const list = $("list");
+
+  function updateStats() {
+    $("count-all").textContent = total;
+    $("count-express").textContent = express;
+    $("count-todo").textContent = todo;
+  }
+
+  function resetCounters() {
+    total = express = todo = 0;
+    updateStats();
+  }
+
+  function formatTime(iso) {
+    return new Date(iso).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  }
+
+  function emptyMessage() {
+    const empty = $("empty");
+    const visible = [...list.children].some((li) => li.id !== "empty" && getComputedStyle(li).display !== "none");
+    empty.hidden = visible;
+    empty.textContent = $("stream").checked
+      ? "En attente de nouvelles commandes express…"
+      : "Activez le flux pour recevoir les commandes.";
+  }
+
+  function row(prediction) {
+    const li = document.createElement("li");
+    const isExpress = prediction.express_eligible;
+    li.className = (isExpress ? "express" : "standard") + " new";
+
+    const badge = document.createElement("span");
+    badge.className = "badge " + (isExpress ? "express" : "standard");
+    badge.textContent = isExpress ? "EXPRESS" : "Standard";
+
+    const info = document.createElement("div");
+    const order = document.createElement("div");
+    order.className = "order";
+    order.textContent = prediction.order_id;          // textContent : aucune injection HTML
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    meta.textContent = "modèle " + prediction.model_version;
+    info.append(order, meta);
+
+    const proba = document.createElement("div");
+    const bar = document.createElement("div");
+    bar.className = "bar";
+    const fill = document.createElement("span");
+    fill.style.width = Math.round(prediction.probability * 100) + "%";
+    bar.append(fill);
+    const label = document.createElement("div");
+    label.className = "proba";
+    label.textContent = "probabilité " + (prediction.probability * 100).toFixed(1) + " %";
+    proba.append(bar, label);
+
+    const time = document.createElement("div");
+    time.className = "time";
+    time.textContent = formatTime(prediction.predicted_at);
+
+    const action = document.createElement("div");
+    if (isExpress) {
+      const done = document.createElement("button");
+      done.className = "done";
+      done.textContent = "Traitée";
+      done.addEventListener("click", () => {      // traitement local à la page (pas enregistré)
+        li.remove();
+        todo = Math.max(0, todo - 1);
+        updateStats();
+        emptyMessage();
+      });
+      action.append(done);
+    }
+
+    li.append(badge, info, proba, time, action);
+    return li;
+  }
+
+  function onPrediction(prediction) {
+    total += 1;
+    if (prediction.express_eligible) { express += 1; todo += 1; notify(prediction); }
+    updateStats();
+    list.insertBefore(row(prediction), $("empty").nextSibling);
+    // Au-delà de MAX_ROWS, on retire d'abord les commandes standard les plus anciennes.
+    const rows = [...list.querySelectorAll("li:not(#empty)")];
+    if (rows.length > MAX_ROWS) (rows.reverse().find((li) => li.classList.contains("standard")) || rows[0]).remove();
+    emptyMessage();
+  }
+
+  function toast(message, isError = false) {
+    const div = document.createElement("div");
+    div.className = "toast" + (isError ? " error" : "");
+    div.textContent = message;
+    $("toasts").append(div);
+    setTimeout(() => div.remove(), 5000);
+  }
+
+  function notify(prediction) {
+    const message = `Nouvelle commande express : ${prediction.order_id} (${Math.round(prediction.probability * 100)} %)`;
+    toast("🚚 " + message);
+    if ("Notification" in window && Notification.permission === "granted") {
+      new Notification("Livraison express", { body: message, tag: prediction.order_id });
+    }
+  }
+
+  function showStream(status) {
+    $("stream").checked = status.active;
+    $("dot").classList.toggle("live", status.active);
+    $("stream-label").textContent = status.active ? "En poste" : "Prendre mon poste";
+    $("stream-detail").textContent = status.active
+      ? "Flux ERP actif depuis " + formatTime(status.since)
+      : "Flux ERP coupé";
+    emptyMessage();
+  }
+
+  // Écoute des prédictions : ouverte tant que le logisticien est en poste.
+  function listen(on) {
+    if (on && !source) {
+      source = new EventSource("/v1/events/predictions");
+      source.addEventListener("prediction.created", (message) => onPrediction(JSON.parse(message.data).prediction));
+      source.onerror = () => { $("stream-detail").textContent = "Reconnexion au flux…"; };
+      source.onopen = () => { if ($("stream").checked) $("stream-detail").textContent = "Flux ERP actif"; };
+    } else if (!on && source) {
+      source.close();
+      source = null;
+    }
+  }
+
+  async function setStream(active) {
+    $("stream").disabled = true;
+    try {
+      const response = await fetch("/v1/erp-stream", {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ active }),
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        toast(body.message || "Flux ERP indisponible.", true);
+        showStream({ active: false });
+        listen(false);
+        return;
+      }
+      if (active) resetCounters();
+      showStream(body);
+      listen(body.active);
+    } catch {
+      toast("API injoignable.", true);
+      showStream({ active: !active });
+    } finally {
+      $("stream").disabled = false;
+    }
+  }
+
+  $("stream").addEventListener("change", (event) => setStream(event.target.checked));
+
+  $("show-standard").addEventListener("change", (event) => {
+    list.classList.toggle("hide-standard", !event.target.checked);
+    emptyMessage();
+  });
+
+  $("clear").addEventListener("click", () => {
+    list.querySelectorAll("li:not(#empty)").forEach((li) => li.remove());
+    todo = 0;
+    updateStats();
+    emptyMessage();
+  });
+
+  $("notify").addEventListener("click", async () => {
+    if (!("Notification" in window)) { toast("Notifications non disponibles dans ce navigateur.", true); return; }
+    const permission = await Notification.requestPermission();
+    $("notify").textContent = permission === "granted" ? "Notifications activées" : "Notifications refusées";
+    $("notify").disabled = permission === "granted";
+  });
+
+  // À l'ouverture : reprendre l'état du flux (un autre poste a pu l'activer).
+  fetch("/v1/erp-stream")
+    .then((response) => response.json())
+    .then((status) => { showStream(status); listen(status.active); })
+    .catch(() => toast("API injoignable.", true));
+</script>
+</body>
+</html>

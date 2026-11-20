@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: eligibilite-livraison-express API
-  version: 2.0.0
+  version: 2.1.0
   description: |
     API de prédiction d'éligibilité à la livraison express.
 
@@ -16,6 +16,11 @@ info:
     Version 2.0.0 (séance 4) : le vocabulaire des commandes est aligné sur celui de l'ERP,
     système de référence de l'entreprise (ADR-0007) : `weather`, `delivery_zone`,
     `customer_type` et l'échelle de `carrier_capacity` changent. Incompatible avec 1.x.
+
+    Version 2.1.0 (séance 6, ADR-0013) : flux temps réel pour le logisticien, ajouts
+    compatibles avec 2.0.0 : historique des prédictions (`GET /v1/predictions`), flux
+    Server-Sent Events (`GET /v1/events/predictions`, événement `PredictionEvent`) et
+    flux temps réel des commandes de l'ERP piloté par le logisticien (`/v1/erp-stream`).
   license:
     name: Usage pédagogique
 servers:
@@ -33,6 +38,8 @@ tags:
     description: Métadonnées du modèle en service (séance 3)
   - name: metrics
     description: Métriques d'observabilité (séance 7)
+  - name: erp
+    description: Flux temps réel des commandes de l'ERP, piloté par le logisticien (séance 6)
 
 paths:
   /health:
@@ -181,6 +188,34 @@ paths:
                 $ref: "#/components/schemas/Error"
 
   /v1/predictions:
+    get:
+      tags: [predictions]
+      operationId: listPredictions
+      summary: Dernières prédictions calculées
+      description: Historique affiché à l'ouverture de la page du logisticien, du plus récent au plus ancien.
+      x-session: 6
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: Dernières prédictions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PredictionList"
+        "422":
+          description: Paramètre invalide
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
     post:
       tags: [predictions]
       operationId: createPrediction
@@ -263,6 +298,73 @@ paths:
                 $ref: "#/components/schemas/Prediction"
         "404":
           description: Prédiction inconnue
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/events/predictions:
+    get:
+      tags: [predictions]
+      operationId: streamPredictions
+      summary: Flux temps réel des prédictions (Server-Sent Events)
+      description: |
+        Flux `text/event-stream` : un événement `prediction.created` par prédiction enregistrée,
+        dont la donnée (`data`) est un `PredictionEvent` en JSON. Un commentaire de maintien
+        (`: keepalive`) part toutes les 15 s. Consommé par la page du logisticien (`EventSource`).
+      x-session: 6
+      responses:
+        "200":
+          description: Flux d'événements `prediction.created`
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  /v1/erp-stream:
+    get:
+      tags: [erp]
+      operationId: getErpStream
+      summary: État du flux temps réel des commandes de l'ERP
+      x-session: 6
+      responses:
+        "200":
+          description: État du flux
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErpStreamStatus"
+    put:
+      tags: [erp]
+      operationId: updateErpStream
+      summary: Activer ou couper le flux temps réel de l'ERP
+      description: |
+        Le logisticien prend son poste (`active: true`) : les commandes arrivées dans l'ERP
+        **depuis l'activation** sont importées au fil de l'eau et suivent le parcours d'une
+        commande reçue (file, prédiction, notification). `active: false` coupe le flux ; les
+        commandes suivantes arrivent par l'import horaire, sans notification.
+      x-session: 6
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ErpStreamUpdate"
+      responses:
+        "200":
+          description: Nouvel état du flux
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErpStreamStatus"
+        "422":
+          description: Demande invalide
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: ERP injoignable, flux non activé
           content:
             application/json:
               schema:
@@ -560,6 +662,69 @@ components:
           type: integer
           description: Version du schéma, pour pouvoir faire évoluer le contrat
           example: 1
+
+    PredictionList:
+      type: object
+      required: [predictions, count]
+      properties:
+        predictions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Prediction"
+        count:
+          type: integer
+          example: 20
+
+    PredictionEvent:
+      type: object
+      description: |
+        Événement diffusé à chaque prédiction enregistrée (flux temps réel, séance 6).
+        Transporté en JSON sur l'échange RabbitMQ `predictions`, puis en Server-Sent Events.
+      required: [event_id, event_type, occurred_at, prediction]
+      properties:
+        event_id:
+          type: string
+          example: 0b8f1c2e-3d4a-4e5f-8a9b-1c2d3e4f5a6b
+        event_type:
+          type: string
+          enum: [prediction.created]
+          example: prediction.created
+        occurred_at:
+          type: string
+          format: date-time
+        prediction:
+          $ref: "#/components/schemas/Prediction"
+        schema_version:
+          type: integer
+          description: Version du schéma, pour pouvoir faire évoluer le contrat
+          example: 1
+
+    ErpStreamUpdate:
+      type: object
+      additionalProperties: false
+      required: [active]
+      properties:
+        active:
+          type: boolean
+          description: "true : prendre son poste ; false : couper le flux"
+
+    ErpStreamStatus:
+      type: object
+      required: [active, received]
+      properties:
+        active:
+          type: boolean
+        since:
+          type: string
+          format: date-time
+          description: Dernière activation
+        last_order_id:
+          type: string
+          description: Dernière commande ERP lue
+          example: ERP-00001234
+        received:
+          type: integer
+          description: Commandes reçues depuis la dernière activation
 
     HealthStatus:
       type: object

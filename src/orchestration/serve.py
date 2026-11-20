@@ -11,7 +11,7 @@ from src.config import ERP_PIPELINE_CRON
 from src.orchestration.flows import erp_pipeline
 
 
-def main():
+def main() -> None:
     """Déploie le flow ERP (planifié et manuel) et exécute ses runs."""
     serve(
         erp_pipeline.to_deployment(

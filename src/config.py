@@ -39,6 +39,18 @@ MLFLOW_ARTIFACT_ROOT = os.getenv("MLFLOW_ARTIFACT_ROOT")
 MLFLOW_EXPERIMENT = "livraison-express"
 REGISTERED_MODEL_NAME = "express-delivery"
 CHAMPION_ALIAS = "champion"
+# Candidat meilleur en ROC AUC mais qui viole un garde-fou métier : un humain tranche (ADR-0010).
+CHALLENGER_ALIAS = "challenger"
 # Intervalle de vérification du champion par l'API (0 = pas de rechargement automatique).
 MODEL_RELOAD_INTERVAL_SECONDS = int(os.getenv("MODEL_RELOAD_INTERVAL_SECONDS", "60"))
 PROMOTION_METRIC = "roc_auc"
+
+# Messagerie (ADR-0013) : sans RABBITMQ_URL, file et diffusion en mémoire (dev, tests).
+# L'URL contient le mot de passe : elle vient de l'environnement (Coolify), jamais du code.
+RABBITMQ_URL = os.getenv("RABBITMQ_URL")
+RABBITMQ_ORDERS_QUEUE = os.getenv("RABBITMQ_ORDERS_QUEUE", "orders")
+RABBITMQ_PREDICTIONS_EXCHANGE = os.getenv("RABBITMQ_PREDICTIONS_EXCHANGE", "predictions")
+
+# Flux temps réel de l'ERP, activé par le logisticien (ADR-0013) : lecture de MongoDB
+# toutes les ERP_STREAM_POLL_SECONDS secondes tant que le flux est actif.
+ERP_STREAM_POLL_SECONDS = float(os.getenv("ERP_STREAM_POLL_SECONDS", "2"))

@@ -92,6 +92,40 @@ class Prediction(BaseModel):
     )
 
 
+class PredictionList(BaseModel):
+    """Dernières prédictions, de la plus récente à la plus ancienne."""
+
+    predictions: list[Prediction]
+    count: int
+
+
+class PredictionEvent(BaseModel):
+    """Événement diffusé à chaque prédiction enregistrée (flux temps réel, ADR-0013)."""
+
+    event_id: str
+    event_type: Literal["prediction.created"]
+    occurred_at: datetime
+    prediction: Prediction
+    schema_version: int = 1
+
+
+class ErpStreamUpdate(BaseModel):
+    """Activation ou coupure du flux ERP par le logisticien."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    active: bool = Field(description="true : prendre son poste ; false : couper le flux")
+
+
+class ErpStreamStatus(BaseModel):
+    """État du flux temps réel des commandes de l'ERP."""
+
+    active: bool
+    since: datetime | None = Field(default=None, description="Dernière activation")
+    last_order_id: str | None = Field(default=None, description="Dernière commande ERP lue")
+    received: int = Field(description="Commandes reçues depuis la dernière activation")
+
+
 class ModelCard(BaseModel):
     """Model card de la cellule 55 du notebook."""
 

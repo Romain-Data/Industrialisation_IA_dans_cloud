@@ -26,6 +26,12 @@ Nous déployons sur le VPS avec Coolify, qui orchestre des conteneurs Docker, sa
 
 Cette décision porte sur la plateforme d'exécution uniquement. Le déclenchement des déploiements (à chaque push, sur tag, manuel, par CI) n'est pas fixé ici : il fait l'objet de l'ADR-0004. L'image et la configuration restent indépendantes de Coolify pour ne pas verrouiller ce choix.
 
+### Schéma des composants
+
+![Architecture : composants déployés sur le VPS (preprod et prod)](../schemas/architecture.svg)
+
+Deux environnements sur le même VPS, chacun avec son API (et son worker), sa base PostgreSQL (commandes et prédictions, registre MLflow, catalogue DuckLake) et ses volumes. La **prod** est l'environnement complet : elle ajoute l'orchestration Prefect et l'ERP simulé du cours, dont le MongoDB est lu en lecture seule par l'ETL horaire (ADR-0009). La **préprod** n'a pas Prefect, pour économiser la mémoire du VPS partagé : on y entraîne par la tâche planifiée Coolify `train`. Les images viennent de GitHub Container Registry.
+
 ### Justification
 
 - **Coolify déjà en place** : le coût du plan de contrôle est déjà payé. Il fournit HTTPS, variables d'environnement, volumes, health checks, redémarrage, limites de ressources et sauvegardes de base, donc rien à réécrire.
@@ -64,6 +70,13 @@ Cette décision porte sur la plateforme d'exécution uniquement. Le déclencheme
 - Garder dans le dépôt un `Dockerfile` et une configuration ne dépendant que de variables d'environnement.
 - Traiter le rechargement du modèle après entraînement dans l'ADR-0004 ou dans une évolution du service.
 
+## Mise à jour (2026-11-17) : deux images, deux environnements Compose
+
+- **Deux images au lieu d'une** : la même base, deux cibles Docker. `api` (API, worker, entraînement, ETL) reste minimale ; `orchestrator` y ajoute Prefect pour exécuter les flows planifiés (ADR-0009). Toutes deux sont construites une seule fois par la CI et promues telles quelles en prod (ADR-0004).
+- **`docker-compose.test.yml`** : toute la chaîne construite depuis les sources, ERP simulé compris (repris du compose de l'ERP par `include`) ; un service `migrate` crée les bases et applique les migrations une seule fois avant l'API et l'orchestrateur, ce qui évite qu'ils le fassent en même temps.
+- **`docker-compose.prod.yml`** : images publiées (`APP_VERSION`), ERP externe (`ERP_MONGO_URI`), secrets obligatoires sans valeur par défaut, limites de ressources (API 1 Go, orchestrateur 1,5 Go, Prefect 512 Mo, PostgreSQL 256 Mo), redémarrage automatique, ports publiés seulement en local. Mesuré le 2026-11-17 avec les images 0.2.0 : environ 1 Go utilisé au total après un entraînement.
+- **Coolify** : le compose de prod décrit la cible ; son déploiement sur le VPS (serveur Prefect et orchestrateur à côté des applications existantes) est l'étape suivante.
+
 ## Alternatives considered
 
 - **Docker Compose géré à la main** : respecte Docker, mais recrée HTTPS, déploiement et supervision que Coolify fournit déjà ; écarté.
@@ -76,6 +89,6 @@ Cette décision porte sur la plateforme d'exécution uniquement. Le déclencheme
 
 ## Links
 
-- Related ADRs : [[ADR-0001 - Stockage des commandes]], [[ADR-0002 - Stockage des artefacts de modele]], [[ADR-0004 - Stratégie de déploiement]]
+- Related ADRs : [[ADR-0001 - Stockage des commandes]], [[ADR-0002 - Stockage des artefacts de modele]], [[ADR-0004 - Stratégie de déploiement]], [[ADR-0008 - Cloud, on-premise ou local]]
 - External references :
   - [Coolify](https://coolify.io/docs)

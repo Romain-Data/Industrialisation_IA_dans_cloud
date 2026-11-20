@@ -25,5 +25,5 @@ IndusIAdansCloud/
 tests/
 openapi.yml
 README.md
-docker-compose.yml
+docker-compose*.yml
 erp_simulator/

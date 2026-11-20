@@ -51,5 +51,12 @@ class OrderRepository(ABC):
         """
 
     @abstractmethod
+    def latest_order_id(self) -> str | None:
+        """Identifiant de la commande la plus récente (le plus grand), ou None si aucune.
+
+        Sert au flux temps réel : à l'activation, on ne lit que les commandes arrivées ensuite.
+        """
+
+    @abstractmethod
     def ping(self) -> bool:
         """Indique si le système source est joignable."""

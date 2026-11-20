@@ -1,0 +1,142 @@
+# Environnement de TEST : toute la chaîne sur une machine, construite depuis les sources.
+#
+#   ERP simulé (PostgreSQL de production + MongoDB analytique, erp_simulator/)
+#     └─▶ orchestrateur Prefect : import ERP → réentraînement (ADR-0009)
+#           └─▶ notre PostgreSQL (commandes, MLflow, DuckLake) + volumes d'artefacts
+#                 └─▶ API, qui recharge seule le nouveau champion
+#
+# Mots de passe : aucun dans le dépôt, ils sont obligatoires (ADR-0005) :
+#   export POSTGRES_PASSWORD=$(openssl rand -hex 16) ERP_POSTGRES_PASSWORD=$(openssl rand -hex 16) \
+#          RABBITMQ_PASSWORD=$(openssl rand -hex 16)
+#   docker compose -f docker-compose.test.yml up -d --build
+#
+# Au premier démarrage, l'API répond 503 (pas encore de modèle) : le premier run du flow
+# (toutes les 2 minutes ici) importe l'ERP et entraîne ; l'API charge le champion dans la
+# minute. Interfaces : API http://127.0.0.1:8000/docs, page du logisticien
+# http://127.0.0.1:8000/logisticien, Prefect http://127.0.0.1:4200.
+#   docker compose -f docker-compose.test.yml down -v     # tout arrêter et effacer
+
+name: express-delivery-test
+
+include:
+  - erp_simulator/docker-compose.erp.yml
+
+x-app-env: &app-env
+  # Pas d'identifiants dans les URL : libpq (psycopg, extension DuckDB postgres) lit PGPASSWORD.
+  PGPASSWORD: ${POSTGRES_PASSWORD:?définir POSTGRES_PASSWORD}
+  DATABASE_URL: postgresql+psycopg://express@postgres-app:5432/orders
+  MLFLOW_TRACKING_URI: postgresql+psycopg://express@postgres-app:5432/mlflow
+  MLFLOW_ARTIFACT_ROOT: file:///app/mlartifacts
+  DUCKLAKE_CATALOG_URL: postgresql+psycopg://express@postgres-app:5432/ducklake
+  ERP_MONGO_URI: mongodb://mongodb:27017
+  TRAINING_SOURCE: ducklake
+  ERP_PIPELINE_CRON: ${ERP_PIPELINE_CRON:-*/2 * * * *}
+  RETRAIN_MIN_NEW_ORDERS: ${RETRAIN_MIN_NEW_ORDERS:-300}
+  MODEL_RELOAD_INTERVAL_SECONDS: "30"
+  PREFECT_API_URL: http://prefect-server:4200/api
+  # Pas de valeur par défaut pour le mot de passe : il vient de l'environnement (ADR-0005).
+  RABBITMQ_URL: amqp://express:${RABBITMQ_PASSWORD:?définir RABBITMQ_PASSWORD}@rabbitmq:5672/%2F
+
+# Volumes partagés : l'orchestrateur écrit les modèles, l'API les lit.
+x-app-volumes: &app-volumes
+  - mlartifacts:/app/mlartifacts
+  - ducklake:/app/ducklake
+
+services:
+  postgres-app:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: express
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?définir POSTGRES_PASSWORD}
+      POSTGRES_DB: orders
+    ports:
+      - "127.0.0.1:${APP_POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U express -d orders"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Création des bases et migrations, une seule fois, avant l'API et l'orchestrateur.
+  migrate:
+    build:
+      context: .
+      target: api
+    image: express-delivery:test
+    command: ["migrate"]
+    environment: *app-env
+    depends_on:
+      postgres-app:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    image: express-delivery:test
+    # Image construite par le service migrate (même cible) : rien à télécharger.
+    pull_policy: never
+    command: ["api"]
+    environment: *app-env
+    volumes: *app-volumes
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # File des commandes et diffusion des prédictions (ADR-0013) : réseau interne uniquement.
+  rabbitmq:
+    image: rabbitmq:4-alpine
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: express
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?définir RABBITMQ_PASSWORD}
+      RABBITMQ_NODENAME: rabbit@rabbitmq
+    volumes:
+      - rabbitmq:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+  prefect-server:
+    image: prefecthq/prefect:3.9.3-python3.12
+    command: ["prefect", "server", "start", "--host", "0.0.0.0"]
+    ports:
+      - "127.0.0.1:${PREFECT_PORT:-4200}:4200"
+    volumes:
+      - prefect:/root/.prefect
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4200/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  orchestrator:
+    build:
+      context: .
+      target: orchestrator
+    image: express-delivery-orchestrator:test
+    command: ["orchestrator"]
+    environment: *app-env
+    volumes: *app-volumes
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      prefect-server:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  rabbitmq:
+  pgdata:
+  mlartifacts:
+  ducklake:
+  prefect:

@@ -1,6 +1,6 @@
 [project]
 name = "industrialisation-ia-dans-cloud"
-version = "0.2.0"
+version = "0.3.0"
 description = "API de prédiction d'éligibilité à la livraison express (industrialisation d'un POC ML)"
 readme = "README.md"
 license = "MIT"
@@ -11,6 +11,7 @@ dependencies = [
     "fastapi>=0.142.2",
     "mlflow-skinny==3.16.1",
     "pandas>=3.0.6",
+    "pika>=1.3",
     "psycopg[binary]>=3.3.9",
     "pymongo>=4.20.0",
     "scikit-learn>=1.9.1",
@@ -43,6 +44,14 @@ default-groups = ["dev", "orchestration"]
 # Notebooks exploratoires : hors du lint de la CI.
 # Simulateur ERP : code fourni par le cours, système externe à l'application.
 extend-exclude = ["*.ipynb", "erp_simulator"]
+
+[tool.ruff.lint]
+# Typage obligatoire des fonctions (Clean Code, barème) : paramètres et retours.
+# Les tests en sont dispensés (fixtures pytest, fonctions de test sans retour).
+extend-select = ["ANN"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["ANN"]
 
 [tool.ruff.lint.flake8-bugbear]
 # Injection de dépendances FastAPI : Depends() en valeur par défaut est voulu.
