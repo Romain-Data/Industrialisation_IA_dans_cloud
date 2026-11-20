@@ -30,7 +30,7 @@ Cette décision porte sur la plateforme d'exécution uniquement. Le déclencheme
 
 ![Architecture : composants déployés sur le VPS (preprod et prod)](../schemas/architecture.svg)
 
-Deux environnements sur le même VPS, chacun avec son API (et son worker), sa base PostgreSQL (commandes et prédictions, registre MLflow, catalogue DuckLake) et ses volumes. La **prod** est l'environnement complet : elle ajoute l'orchestration Prefect et l'ERP simulé du cours, dont le MongoDB est lu en lecture seule par l'ETL horaire (ADR-0009). La **préprod** n'a pas Prefect, pour économiser la mémoire du VPS partagé : on y entraîne par la tâche planifiée Coolify `train`. Les images viennent de GitHub Container Registry.
+Deux environnements sur le même VPS, chacun avec son API (et son worker), sa base PostgreSQL (commandes et prédictions, registre MLflow, catalogue DuckLake) et ses volumes. La **prod** est l'environnement complet : elle ajoute l'orchestration Prefect et l'ERP simulé du cours, dont le MongoDB est lu en lecture seule par l'ETL horaire (ADR-0009). La **préprod** n'a pas Prefect, pour économiser la mémoire du VPS partagé : on y entraîne par la tâche planifiée Coolify `train`. Dans les deux environnements, RabbitMQ porte la file des commandes (API → worker) et diffuse les prédictions vers la page du logisticien, en Server-Sent Events. En prod, le logisticien peut aussi activer le flux temps réel des commandes de l'ERP (ADR-0013). Les images viennent de GitHub Container Registry.
 
 ### Justification
 
