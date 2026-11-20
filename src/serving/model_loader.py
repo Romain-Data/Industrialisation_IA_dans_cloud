@@ -1,6 +1,7 @@
 """Chargement du modèle champion et de sa model card depuis le registre MLflow (ADR-0002)."""
 
 from datetime import UTC, datetime
+from typing import Any
 
 import mlflow
 import mlflow.sklearn
@@ -14,6 +15,7 @@ from src.config import (
     PROJECT_NAME,
     REGISTERED_MODEL_NAME,
 )
+from src.domain.classifier import Classifier
 from src.domain.features import TARGET_COLUMN
 
 MODEL_URI = f"models:/{REGISTERED_MODEL_NAME}@{CHAMPION_ALIAS}"
@@ -25,7 +27,7 @@ LIMITATIONS = [
 ]
 
 
-def champion_version():
+def champion_version() -> str | None:
     """Numéro de version du champion dans le registre, ou None s'il n'y en a pas."""
     mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
     try:
@@ -34,7 +36,7 @@ def champion_version():
         return None
 
 
-def load_model():
+def load_model() -> Classifier:
     """Charge la version du modèle portant l'alias champion dans le registre MLflow."""
     mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 
@@ -47,7 +49,7 @@ def load_model():
         ) from error
 
 
-def load_model_card():
+def load_model_card() -> dict[str, Any] | None:
     """Model card du champion (cellule 55 du notebook), à partir du registre MLflow.
 
     Retourne None s'il n'y a pas encore de champion.

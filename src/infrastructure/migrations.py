@@ -6,11 +6,12 @@ from alembic import command
 from alembic.config import Config
 from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
+from sqlalchemy.engine import Engine
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def alembic_config(database_url=None):
+def alembic_config(database_url: str | None = None) -> Config:
     """Configuration Alembic, éventuellement pointée sur une autre base que DATABASE_URL."""
     config = Config(str(ROOT / "alembic.ini"))
     config.set_main_option("script_location", str(ROOT / "migrations"))
@@ -23,17 +24,17 @@ def alembic_config(database_url=None):
     return config
 
 
-def upgrade_to_head(database_url=None):
+def upgrade_to_head(database_url: str | None = None) -> None:
     """Applique toutes les migrations (équivalent de `alembic upgrade head`)."""
     command.upgrade(alembic_config(database_url), "head")
 
 
-def head_revision():
+def head_revision() -> str | None:
     """Dernière révision connue du code."""
     return ScriptDirectory.from_config(alembic_config()).get_current_head()
 
 
-def current_revision(engine):
+def current_revision(engine: Engine) -> str | None:
     """Révision appliquée à la base, ou None si aucune migration n'a été jouée."""
     with engine.connect() as connection:
         return MigrationContext.configure(connection).get_current_revision()

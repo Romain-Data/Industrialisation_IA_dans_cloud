@@ -13,7 +13,7 @@ import argparse
 from src.training.registry import promote_version
 
 
-def main():
+def main() -> None:
     """Point d'entrée en ligne de commande."""
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     parser.add_argument("--version", type=int, help="version à servir (défaut : le challenger)")

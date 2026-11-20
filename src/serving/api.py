@@ -1,20 +1,24 @@
 """API FastAPI : commandes, prédictions, résultat réel, model card et sondes de santé."""
 
 import uuid
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from src.abstraction.order_store import DuplicateOrderError
+from src.abstraction.order_queue import OrderQueue
+from src.abstraction.order_store import DuplicateOrderError, OrderStore
 from src.config import (
     DATABASE_URL,
     MODEL_RELOAD_INTERVAL_SECONDS,
     MODEL_VERSION,
     PROJECT_NAME,
 )
+from src.domain.classifier import Classifier
 from src.infrastructure.dev.order_queue import InMemoryOrderQueue
 from src.infrastructure.order_store import SqlAlchemyOrderStore
 from src.serving.dependencies import (
@@ -44,18 +48,20 @@ from src.serving.worker import OrderWorker
 router = APIRouter()
 
 
-def error_response(status_code, error, message, details=None):
+def error_response(
+    status_code: int, error: str, message: str, details: list[str] | None = None
+) -> JSONResponse:
     """Réponse d'erreur au format du contrat (code stable, message, détails)."""
     body = Error(error=error, message=message, details=details)
     return JSONResponse(status_code=status_code, content=body.model_dump(exclude_none=True))
 
 
-def new_order_id():
+def new_order_id() -> str:
     """Identifiant de commande généré quand le client n'en fournit pas."""
     return f"CMD-{uuid.uuid4().hex[:8]}"
 
 
-async def validation_error_handler(request: Request, exc: RequestValidationError):
+async def validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
     """Erreur de validation Pydantic -> 422 au format du contrat, champ par champ."""
     details = [
         f"{'.'.join(str(part) for part in err['loc'][1:])}: {err['msg']}"
@@ -64,13 +70,13 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
     return error_response(422, "validation_error", "Commande invalide.", details)
 
 
-async def internal_error_handler(request: Request, exc: Exception):
+async def internal_error_handler(request: Request, exc: Exception) -> JSONResponse:
     """Erreur inattendue -> 500 avec un message générique, sans détail interne (ADR-0005)."""
     return error_response(500, "internal_error", "Erreur interne.")
 
 
 @router.get("/health", tags=["health"], operation_id="getHealth", response_model=HealthStatus)
-def get_health():
+def get_health() -> HealthStatus:
     """Sonde de vivacité : le service répond."""
     return HealthStatus(status="ok", service=PROJECT_NAME, version=MODEL_VERSION)
 
@@ -83,10 +89,10 @@ def get_health():
     responses={503: {"model": ReadinessStatus}},
 )
 def get_readiness(
-    model=Depends(get_model),
-    order_store=Depends(get_order_store),
-    worker=Depends(get_worker),
-):
+    model: Classifier | None = Depends(get_model),
+    order_store: OrderStore = Depends(get_order_store),
+    worker: OrderWorker = Depends(get_worker),
+) -> JSONResponse:
     """Sonde de disponibilité : modèle, base, schéma et worker (503 si un contrôle échoue)."""
     checks = {
         "model": "loaded" if model is not None else "not_loaded",
@@ -123,9 +129,9 @@ def get_readiness(
 )
 def create_order(
     order: OrderFeatures,
-    order_store=Depends(get_order_store),
-    order_queue=Depends(get_order_queue),
-):
+    order_store: OrderStore = Depends(get_order_store),
+    order_queue: OrderQueue = Depends(get_order_queue),
+) -> OrderAccepted | JSONResponse:
     """Enregistre la commande, publie l'événement pour le worker, répond 202 sans attendre."""
     order_data = order.model_dump()
     order_data["order_id"] = order.order_id or new_order_id()
@@ -159,7 +165,9 @@ def create_order(
     response_model=OrderFeatures,
     responses={404: {"model": Error}},
 )
-def get_order(order_id: str, order_store=Depends(get_order_store)):
+def get_order(
+    order_id: str, order_store: OrderStore = Depends(get_order_store)
+) -> dict[str, Any] | JSONResponse:
     """Relit une commande enregistrée (404 si inconnue)."""
     order = order_store.get(order_id)
 
@@ -177,7 +185,9 @@ def get_order(order_id: str, order_store=Depends(get_order_store)):
     response_model=ModelCard,
     responses={503: {"model": Error}},
 )
-def get_model_card_route(model_card=Depends(get_model_card)):
+def get_model_card_route(
+    model_card: dict[str, Any] | None = Depends(get_model_card),
+) -> dict[str, Any] | JSONResponse:
     """Model card du champion en service (503 si aucun modèle n'est chargé)."""
     if model_card is None:
         return error_response(503, "model_unavailable", "Aucun modèle en service.")
@@ -194,8 +204,8 @@ def get_model_card_route(model_card=Depends(get_model_card)):
     responses={404: {"model": Error}, 422: {"model": Error}},
 )
 def record_order_outcome(
-    order_id: str, outcome: OrderOutcome, order_store=Depends(get_order_store)
-):
+    order_id: str, outcome: OrderOutcome, order_store: OrderStore = Depends(get_order_store)
+) -> dict[str, Any] | JSONResponse:
     """Enregistre le résultat réel d'une commande, cible des entraînements (404 si inconnue)."""
     recorded = order_store.record_outcome(order_id, outcome.express_eligible)
 
@@ -213,7 +223,9 @@ def record_order_outcome(
     response_model=Prediction,
     responses={422: {"model": Error}, 503: {"model": Error}},
 )
-def create_prediction(order: OrderFeatures, model=Depends(get_model)):
+def create_prediction(
+    order: OrderFeatures, model: Classifier | None = Depends(get_model)
+) -> dict[str, Any] | JSONResponse:
     """Prédiction immédiate, sans enregistrer la commande (503 sans modèle, 422 si invalide)."""
     if model is None:
         return error_response(503, "model_unavailable", "Le modèle n'est pas chargé.")
@@ -236,7 +248,9 @@ def create_prediction(order: OrderFeatures, model=Depends(get_model)):
     response_model=Prediction,
     responses={404: {"model": Error}},
 )
-def get_prediction(order_id: str, order_store=Depends(get_order_store)):
+def get_prediction(
+    order_id: str, order_store: OrderStore = Depends(get_order_store)
+) -> dict[str, Any] | JSONResponse:
     """Relit la prédiction calculée par le worker (404 si elle n'existe pas encore)."""
     prediction = order_store.get_prediction(order_id)
 
@@ -249,16 +263,16 @@ def get_prediction(order_id: str, order_store=Depends(get_order_store)):
 
 
 def create_app(
-    database_url=DATABASE_URL,
-    model_loader=load_model,
-    order_queue=None,
-    model_card_loader=load_model_card,
-    version_reader=champion_version,
-    reload_interval=MODEL_RELOAD_INTERVAL_SECONDS,
-):
+    database_url: str = DATABASE_URL,
+    model_loader: Callable[[], Classifier] = load_model,
+    order_queue: OrderQueue | None = None,
+    model_card_loader: Callable[[], dict[str, Any] | None] = load_model_card,
+    version_reader: Callable[[], str | None] = champion_version,
+    reload_interval: float = MODEL_RELOAD_INTERVAL_SECONDS,
+) -> FastAPI:
     """Construit l'application ; les dépendances sont injectables pour les tests."""
 
-    def load_champion():
+    def load_champion() -> None:
         """Charge le modèle champion et sa model card (qui décrit toujours la version servie)."""
         try:
             model = model_loader()
@@ -268,7 +282,7 @@ def create_app(
         app.state.model = model
 
     @asynccontextmanager
-    async def lifespan(app: FastAPI):
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         version = version_reader()
         load_champion()
         # Recharge le champion quand l'orchestrateur en promeut un nouveau (ADR-0009).

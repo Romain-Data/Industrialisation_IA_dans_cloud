@@ -1,5 +1,7 @@
 """Collecte des données d'entraînement via un snapshot DuckLake (ADR-0001)."""
 
+import pandas as pd
+
 from src.abstraction.collect import Collect
 from src.abstraction.order_store import OrderStore
 from src.abstraction.training_snapshot import TrainingSnapshotStore
@@ -20,13 +22,13 @@ class CollectDuckLake(Collect):
         order_store: OrderStore,
         snapshot_store: TrainingSnapshotStore,
         version: int | None = None,
-    ):
+    ) -> None:
         self._order_store = order_store
         self._snapshot_store = snapshot_store
         self._version = version
-        self.tracking_params = {}
+        self.tracking_params: dict[str, int] = {}
 
-    def collect_data(self):
+    def collect_data(self) -> pd.DataFrame:
         version = self._version
 
         if version is None:

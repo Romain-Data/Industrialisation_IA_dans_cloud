@@ -16,7 +16,7 @@ if config.config_file_name is not None and config.attributes.get("configure_logg
 target_metadata = Base.metadata
 
 
-def get_url():
+def get_url() -> str:
     """URL passée par le code appelant, sinon variable DATABASE_URL (ADR-0001)."""
     return config.get_main_option("sqlalchemy.url") or DATABASE_URL
 

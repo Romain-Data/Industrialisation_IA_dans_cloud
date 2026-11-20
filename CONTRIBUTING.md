@@ -80,6 +80,7 @@ Les versions suivent [SemVer](https://semver.org/lang/fr/) : majeure pour un cha
 - **Contrat d'API** : toute route ou tout schéma ajouté ou modifié l'est d'abord dans [`openapi.yml`](openapi.yml). Les tests comparent le contrat et l'API générée.
 - **Base de données** : tout changement de modèle SQLAlchemy s'accompagne d'une migration Alembic (`uv run alembic revision -m "..."`), **additive et rétrocompatible** (ajout avant suppression, en deux versions), car une version et la précédente doivent pouvoir tourner sur le même schéma.
 - **Tests** : toute fonctionnalité ou correction est accompagnée de tests pytest.
+- **Typage** : chaque fonction de `src/`, `scripts/` et `migrations/` annote ses paramètres et son type de retour (règle ruff `ANN`, vérifiée en CI ; les tests en sont dispensés). On type par les contrats plutôt que par les bibliothèques : `OrderStore`, `OrderQueue`, et `Classifier` (`src/domain/classifier.py`) pour un modèle, plutôt qu'un pipeline scikit-learn. Les dictionnaires portent le type de leurs clés et valeurs (`dict[str, Any]`, pas `dict`).
 - **Langue** : code et noms en anglais, documentation, docstrings et messages destinés aux utilisateurs en français.
 
 ## Décisions d'architecture (ADR)

@@ -1,9 +1,11 @@
 """Contrôles de qualité des données : colonnes, bornes et catégories autorisées."""
 
+import pandas as pd
+
 from src.domain.features import CATEGORY_VALUES, FEATURE_COLUMNS
 
 
-def _check_value_ranges(df):
+def _check_value_ranges(df: pd.DataFrame) -> None:
     """Contrôles de bornes communs à l'entraînement et à la prédiction."""
     if not df["hour"].between(0, 23).all():
         raise ValueError("Certaines heures sont invalides.")
@@ -43,7 +45,7 @@ REQUIRED_COLUMNS = {
 }
 
 
-def validate_columns(df):
+def validate_columns(df: pd.DataFrame) -> bool:
     """Contrôle de structure avant nettoyage : toutes les colonnes attendues sont présentes."""
     missing_columns = REQUIRED_COLUMNS - set(df.columns)
     if missing_columns:
@@ -51,7 +53,7 @@ def validate_columns(df):
     return True
 
 
-def validate_dataset(df):
+def validate_dataset(df: pd.DataFrame) -> bool:
     """
     Contrôles de qualité élémentaires sur les données d'entrée.
     Cette fonction pourra ensuite être déplacée dans un module data_quality.py.
@@ -92,7 +94,7 @@ def validate_dataset(df):
     return True
 
 
-def validate_order(df):
+def validate_order(df: pd.DataFrame) -> bool:
     """
     Contrôles sur une ou plusieurs commandes à prédire.
     Contrairement à validate_dataset, la cible et les identifiants

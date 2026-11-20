@@ -4,16 +4,17 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from src.abstraction.import_journal import ImportJournal
+from src.domain.entities import ImportReport
 from src.infrastructure.order_store import ImportRecord
 
 
 class SqlAlchemyImportJournal(ImportJournal):
     """Implémentation SQLAlchemy, dans la même base que les commandes."""
 
-    def __init__(self, database_url):
+    def __init__(self, database_url: str) -> None:
         self._engine = create_engine(database_url)
 
-    def last_order_id(self, source):
+    def last_order_id(self, source: str) -> str | None:
         query = (
             select(ImportRecord.last_order_id)
             .where(ImportRecord.source == source, ImportRecord.last_order_id.is_not(None))
@@ -23,7 +24,7 @@ class SqlAlchemyImportJournal(ImportJournal):
         with self._engine.connect() as connection:
             return connection.execute(query).scalar()
 
-    def record(self, source, report):
+    def record(self, source: str, report: ImportReport) -> None:
         with Session(self._engine) as session:
             session.add(
                 ImportRecord(

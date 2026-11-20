@@ -19,6 +19,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from typing import Any
 
 # Commande au format de l'ERP (contrat 2.0.0).
 ERP_ORDER = {
@@ -37,7 +38,13 @@ ERP_ORDER = {
 }
 
 
-def call(base_url, method, path, body=None, timeout=10):
+def call(
+    base_url: str,
+    method: str,
+    path: str,
+    body: dict[str, Any] | None = None,
+    timeout: float = 10,
+) -> tuple[int | None, Any]:
     """Appelle l'API ; retourne (code HTTP, corps JSON ou None)."""
     data = json.dumps(body).encode() if body is not None else None
     request = urllib.request.Request(
@@ -52,7 +59,7 @@ def call(base_url, method, path, body=None, timeout=10):
         return None, None
 
 
-def wait_until_ready(base_url, timeout):
+def wait_until_ready(base_url: str, timeout: float) -> dict[str, Any]:
     """Attend que /health/ready réponde 200 (redémarrage, chargement du modèle)."""
     deadline = time.monotonic() + timeout
     while True:
@@ -64,14 +71,14 @@ def wait_until_ready(base_url, timeout):
         time.sleep(5)
 
 
-def check(name, condition, detail=""):
+def check(name: str, condition: bool, detail: str = "") -> None:
     """Affiche le résultat d'un contrôle et lève une erreur s'il échoue."""
     print(f"{'✓' if condition else '✗'} {name}" + (f" — {detail}" if detail else ""))
     if not condition:
         raise AssertionError(name)
 
 
-def run(base_url, mode, ready_timeout):
+def run(base_url: str, mode: str, ready_timeout: float) -> None:
     """Enchaîne les contrôles ; s'arrête au premier échec."""
     ready = wait_until_ready(base_url, ready_timeout)
     check("disponibilité (/health/ready)", ready.get("status") == "ready", json.dumps(ready["checks"]))
@@ -102,7 +109,7 @@ def run(base_url, mode, ready_timeout):
         check("prédiction asynchrone par le worker", result[0] == 200, order_id)
 
 
-def main():
+def main() -> int:
     """Point d'entrée en ligne de commande."""
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     parser.add_argument("base_url")

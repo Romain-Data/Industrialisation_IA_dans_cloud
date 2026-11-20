@@ -12,7 +12,7 @@ from sqlalchemy.exc import ArgumentError
 from src.config import DATABASE_URL, DUCKLAKE_CATALOG_URL, MLFLOW_TRACKING_URI
 
 
-def ensure_database(url):
+def ensure_database(url: str) -> bool:
     """Crée la base PostgreSQL de l'URL si besoin. Retourne True si elle a été créée."""
     try:
         parsed = make_url(url)
@@ -41,7 +41,7 @@ def ensure_database(url):
         admin.dispose()
 
 
-def main():
+def main() -> None:
     """Crée les bases PostgreSQL manquantes (commandes, MLflow, DuckLake) au démarrage."""
     for url in (DATABASE_URL, MLFLOW_TRACKING_URI, DUCKLAKE_CATALOG_URL):
         if ensure_database(url):
