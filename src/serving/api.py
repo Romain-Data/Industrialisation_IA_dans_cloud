@@ -1,27 +1,42 @@
-"""API FastAPI : commandes, prédictions, résultat réel, model card et sondes de santé."""
+"""API FastAPI : commandes, prédictions, résultat réel, model card, sondes de santé, et
+flux temps réel du logisticien (ADR-0013)."""
 
+import threading
+import time
 import uuid
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, FastAPI, Request
+from fastapi import APIRouter, Depends, FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 
 from src.abstraction.order_queue import OrderQueue
 from src.abstraction.order_store import DuplicateOrderError, OrderStore
+from src.abstraction.prediction_events import PredictionEvents
 from src.config import (
     DATABASE_URL,
+    DEMO_MIN_INTERVAL_SECONDS,
+    DEMO_MODE,
     MODEL_RELOAD_INTERVAL_SECONDS,
     MODEL_VERSION,
     PROJECT_NAME,
+    RABBITMQ_ORDERS_QUEUE,
+    RABBITMQ_PREDICTIONS_EXCHANGE,
+    RABBITMQ_URL,
 )
 from src.domain.classifier import Classifier
+from src.infrastructure.dev.demo_orders import demo_orders
 from src.infrastructure.dev.order_queue import InMemoryOrderQueue
+from src.infrastructure.dev.prediction_events import InMemoryPredictionEvents
 from src.infrastructure.order_store import SqlAlchemyOrderStore
+from src.infrastructure.rabbitmq import RabbitMQOrderQueue, RabbitMQPredictionEvents
+from src.serving.broadcaster import SseBroadcaster, event_stream
 from src.serving.dependencies import (
+    get_broadcaster,
     get_model,
     get_model_card,
     get_order_queue,
@@ -31,6 +46,8 @@ from src.serving.dependencies import (
 from src.serving.model_loader import champion_version, load_model, load_model_card
 from src.serving.model_reloader import ModelReloader
 from src.serving.schemas import (
+    DemoOrdersAccepted,
+    DemoOrdersRequest,
     Error,
     HealthStatus,
     ModelCard,
@@ -40,12 +57,14 @@ from src.serving.schemas import (
     OrderOutcome,
     OrderOutcomeRecorded,
     Prediction,
+    PredictionList,
     ReadinessStatus,
 )
 from src.serving.service import compute_prediction
 from src.serving.worker import OrderWorker
 
 router = APIRouter()
+STATIC_DIR = Path(__file__).parent / "static"
 
 
 def error_response(
@@ -91,19 +110,22 @@ def get_health() -> HealthStatus:
 def get_readiness(
     model: Classifier | None = Depends(get_model),
     order_store: OrderStore = Depends(get_order_store),
+    order_queue: OrderQueue = Depends(get_order_queue),
     worker: OrderWorker = Depends(get_worker),
 ) -> JSONResponse:
-    """Sonde de disponibilité : modèle, base, schéma et worker (503 si un contrôle échoue)."""
+    """Sonde de disponibilité : modèle, base, schéma, file et worker (503 si un contrôle échoue)."""
     checks = {
         "model": "loaded" if model is not None else "not_loaded",
         "order_store": "reachable" if order_store.ping() else "unreachable",
         "schema": "up_to_date" if order_store.schema_is_current() else "outdated",
+        "queue": "reachable" if order_queue.ping() else "unreachable",
         "worker": "running" if worker.is_alive() else "stopped",
     }
     ready = checks == {
         "model": "loaded",
         "order_store": "reachable",
         "schema": "up_to_date",
+        "queue": "reachable",
         "worker": "running",
     }
 
@@ -137,7 +159,7 @@ def create_order(
     order_data["order_id"] = order.order_id or new_order_id()
 
     try:
-        order_store.save(order_data)
+        accept_order(order_data, order_store, order_queue)
     except DuplicateOrderError:
         return error_response(
             422,
@@ -146,6 +168,15 @@ def create_order(
             [f"order_id: {order_data['order_id']}"],
         )
 
+    return OrderAccepted(order_id=order_data["order_id"], status="accepted")
+
+
+def accept_order(order_data: dict[str, Any], order_store: OrderStore, order_queue: OrderQueue) -> None:
+    """Enregistre la commande (source de vérité), puis publie son événement pour le worker.
+
+    Chemin commun aux commandes reçues et aux commandes de démonstration (ADR-0013).
+    """
+    order_store.save(order_data)
     event = OrderEvent(
         event_id=str(uuid.uuid4()),
         event_type="order.created",
@@ -153,8 +184,6 @@ def create_order(
         order=OrderFeatures(**order_data),
     )
     order_queue.publish(event.model_dump(mode="json"))
-
-    return OrderAccepted(order_id=order_data["order_id"], status="accepted")
 
 
 @router.get(
@@ -262,6 +291,91 @@ def get_prediction(
     return prediction
 
 
+@router.get(
+    "/v1/predictions",
+    tags=["predictions"],
+    operation_id="listPredictions",
+    summary="Dernières prédictions calculées",
+    response_model=PredictionList,
+    responses={422: {"model": Error}},
+)
+def list_predictions(
+    limit: int = Query(default=20, ge=1, le=100, description="Nombre de prédictions"),
+    order_store: OrderStore = Depends(get_order_store),
+) -> PredictionList:
+    """Dernières prédictions, de la plus récente à la plus ancienne (historique de la page)."""
+    predictions = [Prediction(**item) for item in order_store.recent_predictions(limit)]
+    return PredictionList(predictions=predictions, count=len(predictions))
+
+
+@router.get(
+    "/v1/events/predictions",
+    tags=["predictions"],
+    operation_id="streamPredictions",
+    summary="Flux temps réel des prédictions (Server-Sent Events)",
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "description": "Flux text/event-stream d'événements prediction.created",
+            "content": {"text/event-stream": {"schema": {"type": "string"}}},
+        }
+    },
+)
+async def stream_predictions(
+    request: Request, broadcaster: SseBroadcaster = Depends(get_broadcaster)
+) -> StreamingResponse:
+    """Chaque prédiction enregistrée est poussée au navigateur dès qu'elle est calculée."""
+    return StreamingResponse(
+        event_stream(broadcaster, request.is_disconnected),
+        media_type="text/event-stream",
+        # Pas de cache ni de mise en tampon par un proxy : les événements partent tout de suite.
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post(
+    "/v1/demo/orders",
+    tags=["demo"],
+    operation_id="createDemoOrders",
+    summary="Générer des commandes de démonstration",
+    status_code=202,
+    response_model=DemoOrdersAccepted,
+    responses={404: {"model": Error}, 422: {"model": Error}, 429: {"model": Error}},
+)
+def create_demo_orders(
+    request: Request,
+    demo: DemoOrdersRequest | None = None,
+    order_store: OrderStore = Depends(get_order_store),
+    order_queue: OrderQueue = Depends(get_order_queue),
+) -> DemoOrdersAccepted | JSONResponse:
+    """Commandes générées (préfixe DEMO-), traitées comme de vraies commandes (ADR-0013)."""
+    state = request.app.state
+    if not state.demo_mode:
+        return error_response(404, "demo_disabled", "Le mode démonstration n'est pas activé.")
+
+    with state.demo_lock:
+        now = time.monotonic()
+        if now - state.last_demo_at < state.demo_min_interval:
+            return error_response(
+                429,
+                "too_many_requests",
+                f"Attendre {state.demo_min_interval:.0f} s entre deux générations.",
+            )
+        state.last_demo_at = now
+
+    orders = demo_orders((demo or DemoOrdersRequest()).count)
+    for order_data in orders:
+        accept_order(order_data, order_store, order_queue)
+    return DemoOrdersAccepted(order_ids=[order["order_id"] for order in orders], count=len(orders))
+
+
+@router.get("/logisticien", include_in_schema=False)
+def logistician_page(request: Request) -> HTMLResponse:
+    """Page du logisticien : prédictions en direct et notification des commandes express."""
+    html = (STATIC_DIR / "logisticien.html").read_text(encoding="utf-8")
+    return HTMLResponse(html.replace("{{DEMO_MODE}}", "true" if request.app.state.demo_mode else "false"))
+
+
 def create_app(
     database_url: str = DATABASE_URL,
     model_loader: Callable[[], Classifier] = load_model,
@@ -269,6 +383,10 @@ def create_app(
     model_card_loader: Callable[[], dict[str, Any] | None] = load_model_card,
     version_reader: Callable[[], str | None] = champion_version,
     reload_interval: float = MODEL_RELOAD_INTERVAL_SECONDS,
+    prediction_events: PredictionEvents | None = None,
+    rabbitmq_url: str | None = RABBITMQ_URL,
+    demo_mode: bool = DEMO_MODE,
+    demo_min_interval: float = DEMO_MIN_INTERVAL_SECONDS,
 ) -> FastAPI:
     """Construit l'application ; les dépendances sont injectables pour les tests."""
 
@@ -290,11 +408,25 @@ def create_app(
         app.state.reloader.start(version if app.state.model is not None else None)
 
         app.state.order_store = SqlAlchemyOrderStore(database_url)
-        app.state.order_queue = order_queue or InMemoryOrderQueue()
+        # RabbitMQ si RABBITMQ_URL est défini (préprod, prod), sinon en mémoire (ADR-0013).
+        app.state.order_queue = order_queue or (
+            RabbitMQOrderQueue(rabbitmq_url, RABBITMQ_ORDERS_QUEUE)
+            if rabbitmq_url
+            else InMemoryOrderQueue()
+        )
+        app.state.prediction_events = prediction_events or (
+            RabbitMQPredictionEvents(rabbitmq_url, RABBITMQ_PREDICTIONS_EXCHANGE)
+            if rabbitmq_url
+            else InMemoryPredictionEvents()
+        )
+        # Les prédictions diffusées sont relayées aux navigateurs connectés (SSE).
+        app.state.broadcaster = SseBroadcaster()
+        app.state.prediction_events.listen(app.state.broadcaster.dispatch)
         app.state.worker = OrderWorker(
             app.state.order_queue,
             app.state.order_store,
             lambda: app.state.model,
+            app.state.prediction_events,
         )
         app.state.worker.start()
 
@@ -302,6 +434,8 @@ def create_app(
 
         app.state.reloader.stop()
         app.state.worker.stop()
+        app.state.prediction_events.close()
+        app.state.order_queue.close()
 
     app = FastAPI(
         title=f"{PROJECT_NAME} API",
@@ -310,6 +444,11 @@ def create_app(
         lifespan=lifespan,
     )
     app.include_router(router)
+    # Bouton de démonstration : activé par DEMO_MODE, limité en fréquence (ADR-0013).
+    app.state.demo_mode = demo_mode
+    app.state.demo_min_interval = demo_min_interval
+    app.state.demo_lock = threading.Lock()
+    app.state.last_demo_at = float("-inf")
     app.add_exception_handler(RequestValidationError, validation_error_handler)
     app.add_exception_handler(Exception, internal_error_handler)
 

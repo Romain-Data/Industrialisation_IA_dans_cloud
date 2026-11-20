@@ -2,12 +2,16 @@
 
 import logging
 import threading
+import uuid
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any
 
 from src.abstraction.order_queue import OrderQueue
 from src.abstraction.order_store import OrderStore
+from src.abstraction.prediction_events import PredictionEvents
 from src.domain.classifier import Classifier
+from src.serving.schemas import Prediction, PredictionEvent
 from src.serving.service import compute_prediction
 
 logger = logging.getLogger(__name__)
@@ -21,8 +25,10 @@ class OrderWorker:
         order_queue: OrderQueue,
         order_store: OrderStore,
         get_model: Callable[[], Classifier | None],
+        prediction_events: PredictionEvents | None = None,
     ) -> None:
         self._queue = order_queue
+        self._events = prediction_events
         self._store = order_store
         self._get_model = get_model
         self._stop = threading.Event()
@@ -54,6 +60,22 @@ class OrderWorker:
             return
 
         self._store.save_prediction(prediction)
+        self._announce(prediction)
+
+    def _announce(self, prediction: dict[str, Any]) -> None:
+        """Diffuse la prédiction enregistrée (page du logisticien, ADR-0013)."""
+        if self._events is None:
+            return
+        event = PredictionEvent(
+            event_id=str(uuid.uuid4()),
+            event_type="prediction.created",
+            occurred_at=datetime.now(UTC),
+            prediction=Prediction(**prediction),
+        )
+        try:
+            self._events.publish(event.model_dump(mode="json"))
+        except Exception:  # la prédiction est en base : seule la notification est perdue
+            logger.exception("Prédiction %s non diffusée.", prediction["order_id"])
 
     def _run(self) -> None:
         while not self._stop.is_set():

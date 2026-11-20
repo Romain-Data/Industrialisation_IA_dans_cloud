@@ -7,6 +7,7 @@ from fastapi import Request
 from src.abstraction.order_queue import OrderQueue
 from src.abstraction.order_store import OrderStore
 from src.domain.classifier import Classifier
+from src.serving.broadcaster import SseBroadcaster
 from src.serving.worker import OrderWorker
 
 
@@ -33,3 +34,8 @@ def get_order_queue(request: Request) -> OrderQueue:
 def get_worker(request: Request) -> OrderWorker:
     """Worker qui calcule les prédictions en arrière-plan."""
     return request.app.state.worker
+
+
+def get_broadcaster(request: Request) -> SseBroadcaster:
+    """Relais des prédictions vers les navigateurs connectés (SSE)."""
+    return request.app.state.broadcaster

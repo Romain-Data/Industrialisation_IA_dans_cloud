@@ -212,19 +212,31 @@ class SqlAlchemyOrderStore(OrderStore):
             if record is None:
                 return None
 
-            prediction = {
-                column.name: getattr(record, column.name)
-                for column in PredictionRecord.__table__.columns
-            }
+            return _prediction_dict(record)
 
-            prediction["predicted_at"] = _as_utc(prediction["predicted_at"])
-            return prediction
+    def recent_predictions(self, limit: int) -> list[dict[str, Any]]:
+        query = (
+            select(PredictionRecord)
+            .order_by(PredictionRecord.predicted_at.desc(), PredictionRecord.order_id.desc())
+            .limit(limit)
+        )
+        with Session(self._engine) as session:
+            return [_prediction_dict(record) for record in session.scalars(query)]
 
     def schema_is_current(self) -> bool:
         try:
             return current_revision(self._engine) == head_revision()
         except Exception:  # noqa: BLE001 - sonde de santé : toute erreur = schéma non vérifiable
             return False
+
+
+def _prediction_dict(record: PredictionRecord) -> dict[str, Any]:
+    """Ligne de la table des prédictions -> dictionnaire au format du contrat Prediction."""
+    prediction = {
+        column.name: getattr(record, column.name) for column in PredictionRecord.__table__.columns
+    }
+    prediction["predicted_at"] = _as_utc(prediction["predicted_at"])
+    return prediction
 
 
 def _as_utc(value: datetime | None) -> datetime | None:

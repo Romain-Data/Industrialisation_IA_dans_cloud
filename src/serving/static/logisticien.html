@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Suivi logistique — livraison express</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #1f2a37; --muted: #5b6675; --line: #e3e7ec;
+    --express: #1f8a5b; --express-bg: #e8f6ef; --standard: #6b7685; --standard-bg: #f0f2f5;
+    --accent: #2f6fb0; --warn: #b54708;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Inter, "Segoe UI", Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+           padding: 18px 28px; background: var(--card); border-bottom: 1px solid var(--line); }
+  h1 { font-size: 20px; margin: 0; }
+  .subtitle { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .status { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--warn); }
+  .dot.live { background: var(--express); box-shadow: 0 0 0 4px rgba(31, 138, 91, .15); }
+  main { max-width: 980px; margin: 24px auto; padding: 0 20px; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .stat .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat .value { font-size: 26px; font-weight: 700; margin-top: 4px; }
+  .stat.express .value { color: var(--express); }
+  .toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; align-items: center; }
+  button { font: inherit; font-size: 14px; border-radius: 8px; padding: 9px 14px; cursor: pointer;
+           border: 1px solid var(--line); background: var(--card); color: var(--text); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button:disabled { opacity: .55; cursor: default; }
+  .demo-note { font-size: 12px; color: var(--muted); }
+  ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  li { display: grid; grid-template-columns: 110px 1fr 150px 90px; align-items: center; gap: 14px;
+       background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; }
+  li.express { border-left: 5px solid var(--express); }
+  li.new { animation: flash 1.6s ease-out; }
+  @keyframes flash { from { background: #fff7d6; } to { background: var(--card); } }
+  .badge { font-size: 12px; font-weight: 700; border-radius: 999px; padding: 4px 10px; text-align: center; }
+  .badge.express { background: var(--express-bg); color: var(--express); }
+  .badge.standard { background: var(--standard-bg); color: var(--standard); }
+  .order { font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+  .meta { font-size: 12px; color: var(--muted); }
+  .bar { height: 8px; background: var(--standard-bg); border-radius: 4px; overflow: hidden; }
+  .bar > span { display: block; height: 100%; background: var(--accent); }
+  .proba { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .time { font-size: 12px; color: var(--muted); text-align: right; }
+  .empty { color: var(--muted); text-align: center; padding: 30px; }
+  #toasts { position: fixed; right: 20px; bottom: 20px; display: grid; gap: 8px; z-index: 10; }
+  .toast { background: var(--express); color: #fff; padding: 12px 16px; border-radius: 10px; font-size: 14px;
+           box-shadow: 0 6px 20px rgba(0, 0, 0, .15); }
+  .toast.error { background: var(--warn); }
+  @media (max-width: 680px) { li { grid-template-columns: 1fr 1fr; } .stats { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Suivi des commandes — livraison express</h1>
+    <div class="subtitle">Chaque commande est prédite dès son arrivée ; les commandes éligibles à l'express sont signalées.</div>
+  </div>
+  <div class="status"><span id="dot" class="dot"></span><span id="status">Connexion…</span></div>
+</header>
+
+<main>
+  <section class="stats">
+    <div class="stat"><div class="label">Commandes reçues (session)</div><div class="value" id="count-all">0</div></div>
+    <div class="stat express"><div class="label">Éligibles express</div><div class="value" id="count-express">0</div></div>
+    <div class="stat"><div class="label">Part express</div><div class="value" id="share">–</div></div>
+  </section>
+
+  <div class="toolbar">
+    <button id="notify">Activer les notifications</button>
+    <button id="demo" class="primary" hidden>Générer 5 commandes</button>
+    <span id="demo-note" class="demo-note" hidden>Démonstration : commandes fictives (préfixe DEMO-), traitées comme de vraies commandes.</span>
+  </div>
+
+  <ul id="list"><li class="empty">En attente des premières commandes…</li></ul>
+</main>
+
+<div id="toasts"></div>
+
+<script>
+  const DEMO_MODE = {{DEMO_MODE}};
+  const MAX_ROWS = 50;
+  const seen = new Set();
+  let total = 0, express = 0;
+
+  const $ = (id) => document.getElementById(id);
+  const list = $("list");
+
+  function formatTime(iso) {
+    return new Date(iso).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  }
+
+  function updateStats() {
+    $("count-all").textContent = total;
+    $("count-express").textContent = express;
+    $("share").textContent = total ? Math.round((100 * express) / total) + " %" : "–";
+  }
+
+  function row(prediction, isNew) {
+    const li = document.createElement("li");
+    const isExpress = prediction.express_eligible;
+    li.className = (isExpress ? "express" : "") + (isNew ? " new" : "");
+
+    const badge = document.createElement("span");
+    badge.className = "badge " + (isExpress ? "express" : "standard");
+    badge.textContent = isExpress ? "EXPRESS" : "Standard";
+
+    const info = document.createElement("div");
+    const order = document.createElement("div");
+    order.className = "order";
+    order.textContent = prediction.order_id;           // textContent : aucune injection HTML
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    meta.textContent = "modèle " + prediction.model_version;
+    info.append(order, meta);
+
+    const proba = document.createElement("div");
+    const bar = document.createElement("div");
+    bar.className = "bar";
+    const fill = document.createElement("span");
+    fill.style.width = Math.round(prediction.probability * 100) + "%";
+    bar.append(fill);
+    const label = document.createElement("div");
+    label.className = "proba";
+    label.textContent = "probabilité " + (prediction.probability * 100).toFixed(1) + " %";
+    proba.append(bar, label);
+
+    const time = document.createElement("div");
+    time.className = "time";
+    time.textContent = formatTime(prediction.predicted_at);
+
+    li.append(badge, info, proba, time);
+    return li;
+  }
+
+  function add(prediction, { isNew }) {
+    if (seen.has(prediction.order_id)) return;
+    seen.add(prediction.order_id);
+    list.querySelector(".empty")?.remove();
+    const li = row(prediction, isNew);
+    if (isNew) list.prepend(li); else list.append(li);
+    while (list.children.length > MAX_ROWS) list.lastElementChild.remove();
+    if (isNew) {
+      total += 1;
+      if (prediction.express_eligible) { express += 1; notify(prediction); }
+      updateStats();
+    }
+  }
+
+  function toast(message, isError = false) {
+    const div = document.createElement("div");
+    div.className = "toast" + (isError ? " error" : "");
+    div.textContent = message;
+    $("toasts").append(div);
+    setTimeout(() => div.remove(), 5000);
+  }
+
+  function notify(prediction) {
+    const message = `Commande ${prediction.order_id} éligible à l'express (${Math.round(prediction.probability * 100)} %)`;
+    toast("🚚 " + message);
+    if ("Notification" in window && Notification.permission === "granted") {
+      new Notification("Livraison express", { body: message, tag: prediction.order_id });
+    }
+  }
+
+  async function loadHistory() {
+    const response = await fetch("/v1/predictions?limit=20");
+    if (!response.ok) return;
+    const body = await response.json();
+    body.predictions.forEach((prediction) => add(prediction, { isNew: false }));
+  }
+
+  function connect() {
+    const source = new EventSource("/v1/events/predictions");
+    source.onopen = () => { $("dot").classList.add("live"); $("status").textContent = "En direct"; };
+    source.onerror = () => { $("dot").classList.remove("live"); $("status").textContent = "Reconnexion…"; };
+    source.addEventListener("prediction.created", (message) => {
+      add(JSON.parse(message.data).prediction, { isNew: true });
+    });
+  }
+
+  $("notify").addEventListener("click", async () => {
+    if (!("Notification" in window)) { toast("Notifications non disponibles dans ce navigateur.", true); return; }
+    const permission = await Notification.requestPermission();
+    $("notify").textContent = permission === "granted" ? "Notifications activées" : "Notifications refusées";
+    $("notify").disabled = permission === "granted";
+  });
+
+  if (DEMO_MODE) {
+    $("demo").hidden = false;
+    $("demo-note").hidden = false;
+    $("demo").addEventListener("click", async () => {
+      $("demo").disabled = true;
+      try {
+        const response = await fetch("/v1/demo/orders", {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ count: 5 }),
+        });
+        const body = await response.json();
+        if (!response.ok) toast(body.message || "Génération refusée.", true);
+      } catch {
+        toast("API injoignable.", true);
+      } finally {
+        setTimeout(() => { $("demo").disabled = false; }, 5000);
+      }
+    });
+  }
+
+  loadHistory().finally(connect);
+</script>
+</body>
+</html>

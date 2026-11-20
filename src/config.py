@@ -44,3 +44,14 @@ CHALLENGER_ALIAS = "challenger"
 # Intervalle de vérification du champion par l'API (0 = pas de rechargement automatique).
 MODEL_RELOAD_INTERVAL_SECONDS = int(os.getenv("MODEL_RELOAD_INTERVAL_SECONDS", "60"))
 PROMOTION_METRIC = "roc_auc"
+
+# Messagerie (ADR-0013) : sans RABBITMQ_URL, file et diffusion en mémoire (dev, tests).
+# L'URL contient le mot de passe : elle vient de l'environnement (Coolify), jamais du code.
+RABBITMQ_URL = os.getenv("RABBITMQ_URL")
+RABBITMQ_ORDERS_QUEUE = os.getenv("RABBITMQ_ORDERS_QUEUE", "orders")
+RABBITMQ_PREDICTIONS_EXCHANGE = os.getenv("RABBITMQ_PREDICTIONS_EXCHANGE", "predictions")
+
+# Bouton de démonstration de la page du logisticien (ADR-0013) : hors cas métier.
+DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() in ("1", "true", "yes")
+DEMO_MAX_ORDERS = 20
+DEMO_MIN_INTERVAL_SECONDS = 5.0

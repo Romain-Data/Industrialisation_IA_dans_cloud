@@ -6,12 +6,14 @@
 #                 └─▶ API, qui recharge seule le nouveau champion
 #
 # Mots de passe : aucun dans le dépôt, ils sont obligatoires (ADR-0005) :
-#   export POSTGRES_PASSWORD=$(openssl rand -hex 16) ERP_POSTGRES_PASSWORD=$(openssl rand -hex 16)
+#   export POSTGRES_PASSWORD=$(openssl rand -hex 16) ERP_POSTGRES_PASSWORD=$(openssl rand -hex 16) \
+#          RABBITMQ_PASSWORD=$(openssl rand -hex 16)
 #   docker compose -f docker-compose.test.yml up -d --build
 #
 # Au premier démarrage, l'API répond 503 (pas encore de modèle) : le premier run du flow
 # (toutes les 2 minutes ici) importe l'ERP et entraîne ; l'API charge le champion dans la
-# minute. Interfaces : API http://127.0.0.1:8000/docs, Prefect http://127.0.0.1:4200.
+# minute. Interfaces : API http://127.0.0.1:8000/docs, page du logisticien
+# http://127.0.0.1:8000/logisticien, Prefect http://127.0.0.1:4200.
 #   docker compose -f docker-compose.test.yml down -v     # tout arrêter et effacer
 
 name: express-delivery-test
@@ -32,6 +34,9 @@ x-app-env: &app-env
   RETRAIN_MIN_NEW_ORDERS: ${RETRAIN_MIN_NEW_ORDERS:-300}
   MODEL_RELOAD_INTERVAL_SECONDS: "30"
   PREFECT_API_URL: http://prefect-server:4200/api
+  # Pas de valeur par défaut pour le mot de passe : il vient de l'environnement (ADR-0005).
+  RABBITMQ_URL: amqp://express:${RABBITMQ_PASSWORD:?définir RABBITMQ_PASSWORD}@rabbitmq:5672/%2F
+  DEMO_MODE: ${DEMO_MODE:-true}
 
 # Volumes partagés : l'orchestrateur écrit les modèles, l'API les lit.
 x-app-volumes: &app-volumes
@@ -78,10 +83,27 @@ services:
     ports:
       - "127.0.0.1:${API_PORT:-8000}:8000"
     depends_on:
+      rabbitmq:
+        condition: service_healthy
       migrate:
         condition: service_completed_successfully
     restart: unless-stopped
 
+  # File des commandes et diffusion des prédictions (ADR-0013) : réseau interne uniquement.
+  rabbitmq:
+    image: rabbitmq:4-alpine
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: express
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?définir RABBITMQ_PASSWORD}
+      RABBITMQ_NODENAME: rabbit@rabbitmq
+    volumes:
+      - rabbitmq:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
   prefect-server:
     image: prefecthq/prefect:3.9.3-python3.12
     command: ["prefect", "server", "start", "--host", "0.0.0.0"]
@@ -114,6 +136,7 @@ services:
     restart: unless-stopped
 
 volumes:
+  rabbitmq:
   pgdata:
   mlartifacts:
   ducklake:

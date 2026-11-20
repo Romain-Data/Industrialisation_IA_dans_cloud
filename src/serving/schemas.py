@@ -92,6 +92,38 @@ class Prediction(BaseModel):
     )
 
 
+class PredictionList(BaseModel):
+    """Dernières prédictions, de la plus récente à la plus ancienne."""
+
+    predictions: list[Prediction]
+    count: int
+
+
+class PredictionEvent(BaseModel):
+    """Événement diffusé à chaque prédiction enregistrée (flux temps réel, ADR-0013)."""
+
+    event_id: str
+    event_type: Literal["prediction.created"]
+    occurred_at: datetime
+    prediction: Prediction
+    schema_version: int = 1
+
+
+class DemoOrdersRequest(BaseModel):
+    """Demande de commandes de démonstration (bouton de la page du logisticien)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    count: int = Field(default=5, ge=1, le=20, description="Nombre de commandes à générer")
+
+
+class DemoOrdersAccepted(BaseModel):
+    """Commandes de démonstration enregistrées ; leurs prédictions arriveront par le flux."""
+
+    order_ids: list[str]
+    count: int
+
+
 class ModelCard(BaseModel):
     """Model card de la cellule 55 du notebook."""
 
