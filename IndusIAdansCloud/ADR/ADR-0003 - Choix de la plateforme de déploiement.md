@@ -26,6 +26,12 @@ Nous déployons sur le VPS avec Coolify, qui orchestre des conteneurs Docker, sa
 
 Cette décision porte sur la plateforme d'exécution uniquement. Le déclenchement des déploiements (à chaque push, sur tag, manuel, par CI) n'est pas fixé ici : il fait l'objet de l'ADR-0004. L'image et la configuration restent indépendantes de Coolify pour ne pas verrouiller ce choix.
 
+### Schéma des composants
+
+![Architecture : composants déployés sur le VPS (preprod et prod)](../schemas/architecture.svg)
+
+Deux environnements identiques (preprod, prod) sur le même VPS, chacun avec son API (et son worker), sa base PostgreSQL (commandes et prédictions, registre MLflow, catalogue DuckLake), ses volumes et son orchestration Prefect. Les images viennent de GitHub Container Registry ; l'ERP (MongoDB) est lu en lecture seule par l'ETL horaire.
+
 ### Justification
 
 - **Coolify déjà en place** : le coût du plan de contrôle est déjà payé. Il fournit HTTPS, variables d'environnement, volumes, health checks, redémarrage, limites de ressources et sauvegardes de base, donc rien à réécrire.

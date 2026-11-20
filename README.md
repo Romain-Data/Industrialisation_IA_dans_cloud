@@ -29,6 +29,10 @@ Documentation interactive de l'API : `/docs` sur chaque environnement.
 
 ## Fonctionnement
 
+![Architecture des composants (preprod et prod sur le VPS)](IndusIAdansCloud/schemas/architecture.svg)
+
+Flux d'une commande :
+
 ```text
                     POST /v1/orders                       file (en mémoire)
  client ──────────────────────────────────▶ API FastAPI ───────────────────▶ worker
@@ -201,6 +205,8 @@ uv run pylint src       # qualité (score minimal dans pyproject.toml)
 
 ## Déploiement
 
+![Pipeline CI/CD : du commit à la production](IndusIAdansCloud/schemas/cicd_pipeline.svg)
+
 Le dépôt suit **GitFlow** (détails dans [CONTRIBUTING.md](CONTRIBUTING.md)). La CI GitHub Actions ([`ci.yml`](.github/workflows/ci.yml)) :
 
 1. à chaque push et pull request : `ruff`, `pylint`, `pytest` (avec un MongoDB de test) ;
@@ -237,12 +243,14 @@ Les choix structurants sont documentés sous forme d'ADR dans [`IndusIAdansCloud
 | ADR-0002 : Stockage des artefacts de modèle | [ADR-0002](IndusIAdansCloud/ADR/ADR-0002%20-%20Stockage%20des%20artefacts%20de%20modele.md) | MLflow, registre, alias `champion`, schéma de données |
 | ADR-0003 : Quelle plateforme de déploiement ? | [ADR-0003](IndusIAdansCloud/ADR/ADR-0003%20-%20Choix%20de%20la%20plateforme%20de%20d%C3%A9ploiement.md) | Coolify sur VPS, image Docker unique |
 | ADR-0004 : Cloud, on-premise ou local ? | — | *À rédiger (ADR-0008)* |
-| ADR-0005 : Quelle stratégie de déploiement ? | [ADR-0004](IndusIAdansCloud/ADR/ADR-0004%20-%20Strat%C3%A9gie%20de%20d%C3%A9ploiement.md) | CI GitHub Actions, GitFlow, preprod / prod |
+| ADR-0005 : Quelle stratégie de déploiement ? | [ADR-0004](IndusIAdansCloud/ADR/ADR-0004%20-%20Strat%C3%A9gie%20de%20d%C3%A9ploiement.md) | Big Bang protégé par health check après validation en preprod, champion / challenger pour le modèle, CI GitHub Actions, GitFlow |
 | ADR-0006 : PostgreSQL, MongoDB, autre ? | [ADR-0007](IndusIAdansCloud/ADR/ADR-0007%20-%20PostgreSQL%2C%20MongoDB%20ou%20autre.md) | MongoDB analytique en lecture seule, ETL |
 | ADR-0007 : Sécuriser les entrées, sorties et l'accès à la donnée | [ADR-0005](IndusIAdansCloud/ADR/ADR-0005%20-%20S%C3%A9curisation%20des%20entr%C3%A9es%2C%20sorties%20et%20acc%C3%A8s%20%C3%A0%20la%20donn%C3%A9e.md) | secrets, image, CI, dépôt, limites connues |
 | *(hors barème)* | [ADR-0009](IndusIAdansCloud/ADR/ADR-0009%20-%20Orchestration%20du%20r%C3%A9entra%C3%AEnement.md) | orchestration Prefect : import ERP horaire, réentraînement, rechargement du modèle |
 | *(hors barème)* | [ADR-0006](IndusIAdansCloud/ADR/ADR-0006%20-%20File%20d'attente.md) | file d'attente des commandes (en mémoire, worker) |
 | *(hors barème)* | [ADR-0010](IndusIAdansCloud/ADR/ADR-0010%20-%20Garde-fous%20m%C3%A9tier%20et%20contr%C3%B4le%20humain%20de%20la%20promotion.md) | garde-fous métier, alias `challenger`, décision humaine, mode shadow (non retenu) |
+| Estimation budgétaire | [ADR-0011](IndusIAdansCloud/ADR/ADR-0011%20-%20Estimation%20budg%C3%A9taire.md) | quote-part du VPS NetCup, comparaison cloud managé, coût humain |
+| Prise en compte des normes (RGPD) | [ADR-0012](IndusIAdansCloud/ADR/ADR-0012%20-%20Conformit%C3%A9%20RGPD.md) | données pseudonymisées, rôles, minimisation, conservation, hébergement UE |
 
 ## Contribuer
 
