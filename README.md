@@ -172,6 +172,12 @@ PREFECT_API_URL=http://127.0.0.1:4200/api uv run python -m src.orchestration.ser
 
 En Docker, l'orchestrateur est une image à part (`--target orchestrator`) : l'image de l'API ne contient pas Prefect.
 
+Sur le VPS, Prefect tourne **en prod seulement**, avec l'ERP simulé du cours (MongoDB) comme source de l'import. La préprod s'entraîne par la tâche planifiée Coolify `train`. L'interface n'est pas exposée sur Internet ; on y accède par tunnel SSH :
+
+```bash
+ssh -N -L 4200:127.0.0.1:4200 <utilisateur>@<vps>   # puis http://localhost:4200
+```
+
 ## Configuration
 
 Toute la configuration passe par des variables d'environnement ([`src/config.py`](src/config.py)).
@@ -213,6 +219,14 @@ Le dépôt suit **GitFlow** (détails dans [CONTRIBUTING.md](CONTRIBUTING.md)). 
 2. sur `develop` : construit **une fois** les images `linux/amd64` de l'API et de l'orchestrateur, vérifie qu'elles démarrent, les scanne avec Trivy et les publie sur GHCR (tag `sha-xxxxxxx`) ;
 3. déploie en **préprod** avec Coolify, attend le résultat, lance des tests de fumée sur l'URL de préprod ([`scripts/smoke_test.py`](scripts/smoke_test.py)) et pose le statut **« Préprod vérifiée »** sur le commit ;
 4. la PR `develop` → `main` exige ce statut ; sa fusion **promeut** les mêmes images (tag `X.Y.Z`, sans reconstruction), crée la GitHub Release, déploie en **prod** et vérifie sa santé.
+
+Pour libérer la mémoire du VPS partagé entre deux sessions, le projet s'éteint et se rallume dans l'ordre des dépendances (bases, puis services, puis applications). Les données restent dans les volumes :
+
+```bash
+python scripts/coolify_power.py status            # état de chaque ressource
+python scripts/coolify_power.py off all           # tout éteindre (--dry-run pour simuler)
+python scripts/coolify_power.py on prod           # rallumer la prod
+```
 
 Coolify ne met une nouvelle version en service que si `/health/ready` répond ; sinon l'ancienne reste en place et la CI échoue.
 

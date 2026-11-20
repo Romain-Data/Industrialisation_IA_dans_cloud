@@ -15,8 +15,9 @@ Le projet tourne sur ce VPS sous forme de conteneurs gérés par Coolify, avec d
 |---|---|---|---|
 | API + worker (`express-delivery-*`) | preprod et prod | 1 Go chacun | 1 chacun |
 | PostgreSQL 17 | preprod et prod | 256 Mo chacun | 0,5 chacun |
-| Serveur Prefect (ADR-0009) | par environnement orchestré | 512 Mo | 0,5 |
-| Orchestrateur Prefect (ETL + entraînement) | par environnement orchestré | 1,5 Go | 1 |
+| Serveur Prefect (ADR-0009) | prod | 512 Mo | 0,5 |
+| Orchestrateur Prefect (ETL + entraînement) | prod | 1,5 Go | 1 |
+| ERP simulé : MongoDB, PostgreSQL, simulateur (ADR-0009) | prod | 512 Mo + 256 Mo + 128 Mo | 0,5 + 0,5 + 0,25 |
 
 Les autres services utilisés sont gratuits pour un dépôt public : GitHub, GitHub Actions et GitHub Container Registry. C'est aussi le cas de Coolify (auto-hébergé), MLflow, Prefect et DuckLake (open source, auto-hébergés).
 
@@ -32,12 +33,14 @@ La quote-part est la mémoire maximale réservée par le projet, rapportée aux 
 
 | Périmètre | Mémoire réservée | Part du VPS | Coût annuel | Coût mensuel |
 |---|---|---|---|---|
-| Actuel sur Coolify : API + PostgreSQL en preprod et en prod | 2,5 Go | 31 % | ≈ 40 € | ≈ 3,3 € |
-| Avec l'orchestration Prefect (un environnement) | 4,5 Go | 56 % | ≈ 72 € | ≈ 6 € |
+| Initial (17/11) : API + PostgreSQL en preprod et en prod | 2,5 Go | 31 % | ≈ 40 € | ≈ 3,3 € |
+| Actuel (20/11) : + Prefect et ERP simulé en prod | 5,4 Go | 67 % | ≈ 86 € | ≈ 7,2 € |
 | Nom de domaine (sous-domaines `express-delivery*`) | — | — | 0 € de plus (13,80 € déjà payés) | — |
 | GitHub, Actions, GHCR, logiciels open source | — | — | 0 € | 0 € |
 
 Le coût marginal réel est **nul** : le VPS et le domaine étaient déjà payés avant le projet. La quote-part mesure ce que le projet « consomme » de la machine. Si le projet utilisait la machine seul, le coût total serait de **141,84 € par an** (≈ 11,80 € par mois).
+
+Ces montants supposent que tout tourne en permanence. Entre deux vérifications, le projet est éteint (`scripts/coolify_power.py off all`) : la mémoire revient aux autres projets du VPS, et les données restent dans les volumes.
 
 ### Point de comparaison : cloud managé
 

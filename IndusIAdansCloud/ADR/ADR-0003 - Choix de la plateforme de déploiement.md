@@ -30,7 +30,7 @@ Cette décision porte sur la plateforme d'exécution uniquement. Le déclencheme
 
 ![Architecture : composants déployés sur le VPS (preprod et prod)](../schemas/architecture.svg)
 
-Deux environnements identiques (preprod, prod) sur le même VPS, chacun avec son API (et son worker), sa base PostgreSQL (commandes et prédictions, registre MLflow, catalogue DuckLake), ses volumes et son orchestration Prefect. Les images viennent de GitHub Container Registry ; l'ERP (MongoDB) est lu en lecture seule par l'ETL horaire.
+Deux environnements sur le même VPS, chacun avec son API (et son worker), sa base PostgreSQL (commandes et prédictions, registre MLflow, catalogue DuckLake) et ses volumes. La **prod** est l'environnement complet : elle ajoute l'orchestration Prefect et l'ERP simulé du cours, dont le MongoDB est lu en lecture seule par l'ETL horaire (ADR-0009). La **préprod** n'a pas Prefect, pour économiser la mémoire du VPS partagé : on y entraîne par la tâche planifiée Coolify `train`. Les images viennent de GitHub Container Registry.
 
 ### Justification
 
